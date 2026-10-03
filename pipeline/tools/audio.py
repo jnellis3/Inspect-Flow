@@ -6,7 +6,8 @@
 
 Results are cached by content hash, so re-running after an edit only pays for changed lines.
 Env: OPENROUTER_API_KEY; optional TTS_MODEL (default openai/gpt-audio-mini),
-MUSIC_MODEL (default google/lyria-3-pro-preview).
+MUSIC_MODEL (default google/lyria-3-pro-preview), TTS_FALLBACK (default "kokoro": if OpenRouter
+can't voice a line, use the local Kokoro voice instead; "off" to fail instead).
 """
 import base64
 import difflib
@@ -127,7 +128,34 @@ def align_words(script, heard):
     return out
 
 
+# Closest local Kokoro voice for each OpenRouter voice.
+KOKORO_VOICE = {"ash": "am_michael", "ballad": "bm_george", "verse": "am_adam", "coral": "af_heart", "sage": "af_sky", "shimmer": "af_nova"}
+TRIM = "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse"
+
+
+def kokoro(text, voice, dest):
+    """Local text-to-speech (Kokoro-82M via HyperFrames): no network, no cost."""
+    script = dest.with_suffix(".txt")
+    raw = dest.with_suffix(".kokoro.wav")
+    script.write_text(text)
+    run([os.environ.get("HYPERFRAMES_BIN", "hyperframes"), "tts", str(script), "-v", KOKORO_VOICE.get(voice, "am_michael"), "-o", str(raw)])
+    loudnorm(raw, dest, -16, TRIM)
+    raw.unlink(); script.unlink()
+
+
 def tts(text, voice, dest):
+    """Voice one line; returns (cost, engine). Falls back to local Kokoro if OpenRouter can't."""
+    try:
+        return openrouter_tts(text, voice, dest), "openrouter"
+    except Exception as e:  # unreachable model, policy block, outage, or no verbatim read
+        if os.environ.get("TTS_FALLBACK", "kokoro") == "off":
+            raise
+        log(f"  WARNING: OpenRouter voice failed ({str(e)[:160]}); using the local Kokoro voice instead")
+        kokoro(text, voice, dest)
+        return 0.0, "kokoro"
+
+
+def openrouter_tts(text, voice, dest):
     expected = words_of(text)
     for attempt in range(3):
         pcm, heard, cost = stream({
@@ -140,7 +168,7 @@ def tts(text, voice, dest):
             with wave.open(str(raw), "wb") as w:
                 w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000); w.writeframes(pcm)
             # Trim leading/trailing silence so scene timing is driven by speech, then normalize.
-            loudnorm(raw, dest, -16, "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse")
+            loudnorm(raw, dest, -16, TRIM)
             raw.unlink()
             return cost
         log(f"  retry: narration drifted from the script (match {ratio:.2f})")
@@ -170,16 +198,20 @@ def cmd_vo(job):
         key = hashlib.sha1(json.dumps([TTS_MODEL, voice, VOICE_DIRECTION, text]).encode()).hexdigest()[:12]
         dest = out / f"{scene['id']}-{key}.wav"
         cached = manifest.get(scene["id"])
-        if cached and cached.get("key") == key and dest.exists():
+        # Lines voiced by the fallback are retried with OpenRouter on the next run.
+        if cached and cached.get("key") == key and dest.exists() and cached.get("engine", "openrouter") == "openrouter":
             result[scene["id"]] = cached
             continue
         log(f"voicing {scene['id']}: {text[:70]}…")
-        total += tts(text, voice, dest)
-        result[scene["id"]] = {"key": key, "file": str(dest.relative_to(job / "reel")), "duration": round(duration(dest), 3),
+        cost, engine = tts(text, voice, dest)
+        total += cost
+        result[scene["id"]] = {"key": key, "engine": engine, "file": str(dest.relative_to(job / "reel")), "duration": round(duration(dest), 3),
                                "words": align_words(text, word_times(dest))}
     manifest_path.write_text(json.dumps(result, indent=1))
     spoken = sum(v["duration"] for v in result.values())
-    print(json.dumps({"scenes": len(result), "spokenSeconds": round(spoken, 1), "costUsd": round(total, 4)}))
+    fallback = sorted(k for k, v in result.items() if v.get("engine") == "kokoro")
+    print(json.dumps({"scenes": len(result), "spokenSeconds": round(spoken, 1), "costUsd": round(total, 4),
+                      **({"warning": f"{len(fallback)} line(s) used the local fallback voice (OpenRouter voice unavailable). Mention it in summary.md.", "fallbackScenes": fallback} if fallback else {})}))
 
 
 def cmd_music(job, seconds=None):
@@ -195,7 +227,14 @@ def cmd_music(job, seconds=None):
     if not dest.exists():
         dest.parent.mkdir(parents=True, exist_ok=True)
         log("composing music bed…")
-        data, _, cost = stream({"model": MUSIC_MODEL, "modalities": ["text", "audio"], "messages": [{"role": "user", "content": prompt}]})
+        try:
+            data, _, cost = stream({"model": MUSIC_MODEL, "modalities": ["text", "audio"], "messages": [{"role": "user", "content": prompt}]})
+            if not data:
+                raise RuntimeError("no audio returned")
+        except Exception as e:  # music is a nice-to-have: carry on without it
+            (job / "reel" / "audio" / "music.json").unlink(missing_ok=True)
+            print(json.dumps({"music": None, "warning": f"Music couldn't be generated ({str(e)[:160]}); the reel will have no music bed. Mention it in summary.md."}))
+            return
         raw = dest.with_suffix(".mp3")
         raw.write_bytes(data)
         loudnorm(raw, dest, -14)

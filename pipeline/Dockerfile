@@ -27,8 +27,10 @@ COPY --chown=node:node . /opt/pipeline
 RUN cd /opt/pipeline && rm -rf .venv node_modules && npm install --omit=dev --no-fund --no-audit && chmod +x run-job.sh bin/*
 
 USER node
-# HyperFrames' pinned Chrome (also used to print the PDF).
-RUN hyperframes browser ensure && mkdir -p "$HOME/.claude"
+# HyperFrames' pinned Chrome (also used to print the PDF), and the local fallback voice model.
+ENV HYPERFRAMES_PYTHON=/opt/venv/bin/python
+RUN hyperframes browser ensure && mkdir -p "$HOME/.claude" \
+    && hyperframes tts "Ready." -o /tmp/voice-check.wav && rm /tmp/voice-check.wav
 ENV PATH=/opt/pipeline/bin:$PATH
 WORKDIR /job
 ENTRYPOINT ["/opt/pipeline/run-job.sh"]

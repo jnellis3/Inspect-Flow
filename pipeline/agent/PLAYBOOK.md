@@ -164,6 +164,10 @@ No genre that fights speech (no vocals, no heavy drops).
 1. `voice` → `build`. Read every warning and fix the edit (usually: shots too short for the narration,
    or narration too long for a scene).
 2. After the first clean build: `music <duration>` → `build`.
+   If `voice` or `music` prints a `warning` (a line used the local fallback voice, or no music
+   bed could be made), carry on and say so in `summary.md`. `build` refuses to make a narrated
+   reel with missing narration; if `voice` fails outright, don't work around it: stop and explain
+   the error in `summary.md`.
 3. `snap` at: the middle of the title, the overview, **every freeze at its peak** (times are in
    `reel/timeline.json` → `freezes`), one moment per other scene, all in one call. Open the contact
    sheet and the freeze frames (in parallel) and critique like a picky editor:

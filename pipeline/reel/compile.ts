@@ -117,11 +117,12 @@ const shotLen = (s: Shot) => (s.out - s.in) / s.speed;
 
 type Timed = { scene: Scene; start: number; dur: number; voStart: number; shots: Shot[] };
 const timed: Timed[] = [];
+const unvoiced: string[] = [];
 let clock = 0;
 for (const scene of edit.scenes) {
   const vo = voice[scene.id];
   const said = edit.voice.mode === "ai" ? (vo?.duration ?? 0) : (scene.audio ?? []).reduce((a, r) => a + (r.out - r.in), 0);
-  if (edit.voice.mode === "ai" && scene.vo && !vo) warnings.push(`${scene.id}: has vo text but no generated voice yet. Run the voice tool.`);
+  if (edit.voice.mode === "ai" && scene.vo && !vo) unvoiced.push(scene.id);
   // The inspector's own voice is picture-synced, so it can't lead the cut.
   const lead = edit.voice.mode === "source" ? 0 : scene.type === "title" ? 1.0 : LEAD;
   const need = said > 0 ? lead + said + TAIL : 0;
@@ -164,6 +165,11 @@ for (const scene of edit.scenes) {
   clock += dur;
 }
 const total = r3(clock);
+// A narrated reel without its narration is worse than no reel: refuse to build it.
+if (unvoiced.length && !process.env.ALLOW_SILENT) {
+  console.error(`Narration is missing for: ${unvoiced.join(", ")}. Run \`voice\` (and fix any error it reports) before building.`);
+  process.exit(1);
+}
 
 // ---------- emit ----------
 const html: string[] = [];
