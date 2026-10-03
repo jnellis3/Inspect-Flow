@@ -3,6 +3,7 @@
 !package-lock.json
 !.npmrc
 !next.config.ts
+!instrumentation.ts
 !next-env.d.ts
 !tsconfig.json
 !postcss.config.mjs
