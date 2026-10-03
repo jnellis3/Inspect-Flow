@@ -1,0 +1,7 @@
+# Shared by the tool wrappers: locate the pipeline and the job (the current directory).
+PIPELINE="${PIPELINE_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+PY="${PIPELINE_PYTHON:-$PIPELINE/.venv/bin/python}"
+JOB="${JOB_DIR:-$PWD}"
+export HYPERFRAMES_NO_TELEMETRY=1
+HF="${HYPERFRAMES_BIN:-hyperframes}"
+[ -f "$JOB/brief.json" ] || { echo "Run this from a job directory (no brief.json in $JOB)" >&2; exit 2; }

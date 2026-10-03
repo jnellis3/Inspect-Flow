@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# music <seconds>: compose the music bed for edit.json's music.prompt.
+source "$(dirname "$0")/_env"; exec "$PY" "$PIPELINE/tools/audio.py" music "$JOB" "${1:?usage: music <seconds>}"

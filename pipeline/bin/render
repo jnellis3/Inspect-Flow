@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Final render → out/highlight-reel.mp4
+source "$(dirname "$0")/_env"
+mkdir -p "$JOB/out" && cd "$JOB/reel" && "$HF" render --quality "${RENDER_QUALITY:-looks}" --output "$JOB/out/highlight-reel.mp4" 2>&1 | grep -vE 'Render:trace|Streaming frame|Capturing frame' | tail -8

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# frames <t> [--grid] [--crop x,y,w,h] | frames <t1> <t2>… | frames --range A B --step S
+source "$(dirname "$0")/_env"; exec "$PY" "$PIPELINE/tools/frames.py" "$JOB" "$@"

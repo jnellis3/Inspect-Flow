@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Build out/report.pdf from findings.json; page previews → out/report-pages/
+source "$(dirname "$0")/_env"
+export CHROME_BIN="${CHROME_BIN:-$("$HF" browser path 2>/dev/null | tail -1)}"
+node "$PIPELINE/report/compile.ts" "$JOB" || exit 1
+rm -rf "$JOB/out/report-pages" && mkdir -p "$JOB/out/report-pages"
+pdftoppm -r 70 -png "$JOB/out/report.pdf" "$JOB/out/report-pages/page" && ls "$JOB"/out/report-pages/*.png

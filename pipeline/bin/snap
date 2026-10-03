@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# snap <t1,t2,…>: still frames of the compiled reel → reel/snapshots/ (+ contact-sheet.jpg)
+source "$(dirname "$0")/_env"
+cd "$JOB/reel" && rm -rf snapshots && "$HF" snapshot --at "${1:?usage: snap <t1,t2,...>}" 2>&1 | grep -E 'snapshots/|contact|rror' | sed "s#snapshots/#$JOB/reel/snapshots/#"

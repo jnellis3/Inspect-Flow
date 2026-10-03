@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Validate findings.json + edit.json and compile the reel. Prints duration and warnings.
+source "$(dirname "$0")/_env"; exec node "$PIPELINE/reel/compile.ts" "$JOB"
