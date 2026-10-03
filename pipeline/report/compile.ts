@@ -34,19 +34,29 @@ const ORDER = ["safety", "repair", "minor", "monitor"];
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const mmss = (t: number) => `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 
-function photo(t: number) {
-  const name = `assets/photos/t${t.toFixed(2).replace(".", "_")}.jpg`;
+const supporting = (existsSync(join(job, "analysis/supporting.json")) ? readJson("analysis/supporting.json") : []) as { kind: string; path?: string; width?: number; height?: number }[];
+const dims = (src?: string) => {
+  const item = src ? supporting.find(i => i.path === src) : undefined;
+  return item?.width && item.height ? { width: item.width, height: item.height } : probe;
+};
+
+// A frame of the walkthrough (or a supporting clip) at time t, or a supporting photo as is.
+function photo(t: number, src?: string) {
+  if (src?.endsWith(".jpg")) return `../${src}`;
+  const tag = src ? src.replace(/^.*\//, "").replace(/\.\w+$/, "") + "-" : "";
+  const name = `assets/photos/${tag}t${t.toFixed(2).replace(".", "_")}.jpg`;
   if (!existsSync(join(out, name))) {
-    const src = readdirSync(join(job, "input")).find(f => f.startsWith("walkthrough."))!;
-    execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", String(t), "-i", join(job, "input", src), "-frames:v", "1", "-vf", "scale='min(2400,iw)':-2", "-q:v", "3", join(out, name)]);
+    const input = src ? join(job, src) : join(job, "input", readdirSync(join(job, "input")).find(f => f.startsWith("walkthrough."))!);
+    execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", String(t), "-i", input, "-frames:v", "1", "-vf", "scale='min(2400,iw)':-2", "-q:v", "3", join(out, name)]);
   }
   return name;
 }
 
 // A photo with the same ring/box/dot callouts as the video, in crop-relative coordinates.
-function figure(at: number, anns: Annotation[], crop?: { x: number; y: number; w: number; h: number }) {
+function figure(at: number, anns: Annotation[], crop?: { x: number; y: number; w: number; h: number }, src?: string) {
   const c = crop ?? { x: 0, y: 0, w: 1, h: 1 };
-  const aspect = (probe.width * c.w) / (probe.height * c.h);
+  const { width, height } = dims(src);
+  const aspect = (width * c.w) / (height * c.h);
   const vw = 1000, vh = vw / aspect;
   const X = (x: number) => ((x - c.x) / c.w) * vw, Y = (y: number) => ((y - c.y) / c.h) * vh;
   const shapes = anns.map(a => {
@@ -58,7 +68,7 @@ function figure(at: number, anns: Annotation[], crop?: { x: number; y: number; w
     return g + label;
   }).join("");
   return `<div class="fig" style="aspect-ratio:${aspect}">
-    <img src="${photo(at)}" style="width:${100 / c.w}%;left:${(-c.x / c.w) * 100}%;top:${(-c.y / c.h) * 100}%">
+    <img src="${photo(at, src)}" style="width:${100 / c.w}%;left:${(-c.x / c.w) * 100}%;top:${(-c.y / c.h) * 100}%">
     <svg viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="none">${shapes}</svg>
     <span class="ts">Video ${mmss(at)}</span></div>`;
 }
@@ -73,7 +83,7 @@ function findingPage(f: Finding, i: number) {
   return `<section class="finding" style="--c:${p.color}">
     <header><span class="n">${String(i + 1).padStart(2, "0")}</span><div><div class="area">${esc(f.area)}</div><h2>${esc(f.title)}</h2>
       <div class="chips"><span class="chip pri"><i></i>${p.label}</span><span class="chip">${WHO[f.who]}</span>${f.confidence !== "confirmed" ? `<span class="chip soft">${f.confidence === "likely" ? "Likely" : "Possible, verify"}</span>` : ""}</div></div></header>
-    <div class="body">${figure(f.photo.at, f.photo.annotations, f.photo.crop)}
+    <div class="body">${figure(f.photo.at, f.photo.annotations, f.photo.crop, f.photo.src)}
     <div class="cols">
       <div><h3>What we saw</h3><p>${esc(f.summary)}</p></div>
       <div><h3>Why it matters</h3><p>${esc(f.whyItMatters)}</p></div>
@@ -166,7 +176,7 @@ ${sorted.map((f, i) => `<tr><td class="num">${i + 1}</td><td><b>${esc(f.title)}<
 </section>
 ${sorted.map(findingPage).join("\n")}
 ${data.positives.length ? `<section class="good"><div class="kicker" style="color:var(--muted)">Good news</div><h1>Done right</h1><div class="goodgrid">
-${data.positives.map(p => `<div>${figure(p.at, [])}<h3>${esc(p.title)}</h3><p>${esc(p.note)}</p></div>`).join("")}</div></section>` : ""}
+${data.positives.map(p => `<div>${figure(p.at, [], undefined, p.src)}<h3>${esc(p.title)}</h3><p>${esc(p.note)}</p></div>`).join("")}</div></section>` : ""}
 ${data.limitations.length ? `<div class="limits"><b>About this report.</b> ${data.limitations.map(esc).join(" ")}</div>` : ""}
 </body></html>`;
 

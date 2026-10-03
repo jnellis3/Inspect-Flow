@@ -22,7 +22,10 @@ analysis/transcript.txt     timestamped transcript of everything said, [mm:ss-mm
 analysis/transcript.json    same with word-level timings
 analysis/shots.json         hard-cut times in the source; don't let a shot straddle one by accident
 analysis/filmstrip/*.jpg    contact sheets, one frame every 2 s (60 s per sheet), labeled mm:ss
-supporting/                 optional extra photos/clips/notes the user attached
+supporting/                 extra photos, clips and notes the user attached (as uploaded)
+analysis/supporting.json    the same, ready to use: photos → media/supporting/*.jpg, clips →
+                            media/supporting/*.mp4 (with size and duration); documents stay in
+                            supporting/
 ```
 
 You write `findings.json`, `edit.json` and `summary.md`. The tools build everything else.
@@ -33,7 +36,7 @@ read it before writing either file.
 
 | Command | What it does |
 |---|---|
-| `frames <t> [--grid] [--crop x,y,w,h]` | One full-resolution frame. `--grid` overlays 0.1 gridlines labeled in frame coordinates: use it to place every annotation. `--crop` zooms into a region to check fine detail. |
+| `frames <t> [--grid] [--crop x,y,w,h] [--src media/supporting/…]` | One full-resolution frame (of the walkthrough, or a supporting photo/clip with `--src`). `--grid` overlays 0.1 gridlines labeled in frame coordinates: use it to place every annotation. `--crop` zooms into a region to check fine detail. |
 | `frames --evidence A-B [C-D …]` | One evidence sheet per window: a 12-frame strip across it plus a full-resolution gridded still of the sharpest frame. Many windows per call: the fastest way to see a moment. |
 | `frames <t1> <t2> …` / `frames --range A B --step S` | Tiled sheet of moments (from the proxy). Use to check camera steadiness, find the clearest frame, check a shot doesn't point at the sky. |
 | `voice` | Generates narration for every scene's `vo` (ai mode) or prepares the inspector's audio (source mode). Cached; re-run after any `vo` edit. |
@@ -64,6 +67,16 @@ decide. Some things that make you fast and keep your judgment sharp:
   team?).
 - Typical uploads are messier than this transcript suggests: the person may describe something
   while the camera points elsewhere, or show something without saying anything. Reconcile both.
+
+## Supporting media
+
+People often attach close-up photos, extra clips, or notes. Read every document and look at every
+photo and clip (`frames --src media/supporting/<file> --grid`; time is ignored for photos). Use
+them. A close-up photo often shows a defect far better than the walkthrough: make it the finding's
+`photo` (`photo.src`) and/or a shot in its scene (`shot.src`). For a photo shot, `out - in` is how
+many seconds it's on screen, and `freeze` (with `at` inside that range) zooms and annotates it. Portrait
+phone media is shown whole over a blurred fill automatically; annotation coordinates are still
+fractions of the photo or clip itself.
 
 ## Findings (`findings.json`)
 

@@ -25,7 +25,7 @@ upload ─► ingest ─► transcribe ─► director agent ──────�
   design system (`reel/theme.css`). Every video looks professional and on-brand, and the
   storyboard is plain data a UI can show and let people edit before rendering.
 - **One provider key.** Agent, narration, and music go through OpenRouter. The default director
-  is `anthropic/claude-opus-5.5`; any OpenRouter model id works via `AGENT_MODEL`. Transcription
+  is `anthropic/claude-sonnet-5.5`; any OpenRouter model id works via `AGENT_MODEL`. Transcription
   runs locally (free, private).
 
 ## Contracts (`reel/schema.ts`)

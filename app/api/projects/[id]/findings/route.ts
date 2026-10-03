@@ -1,5 +1,0 @@
-import {z} from "zod";
-import { api,body,getProject,saveProject,AppError } from "@/lib/inspection/store";
-import {findingSchema} from "@/lib/inspection/validation";
-type C={params:Promise<{id:string}>};
-export const POST=(req:Request,c:C)=>api(req,async()=>{const v=await body(req,z.object({revision:z.number().int(),finding:findingSchema}));const p=await getProject((await c.params).id);if(!p.video)throw new AppError(409,"Upload the walkthrough first.");if(v.finding.endTimestamp<v.finding.timestamp)throw new AppError(400,"The end time must follow the start time.");if(p.video.duration&&(v.finding.endTimestamp>p.video.duration||v.finding.timestamp>=p.video.duration))throw new AppError(400,"The evidence range must be within the video.");const old=p.findings.find(f=>f.id===v.finding.id);const f={...v.finding,source:"inspector" as const,id:old?.id||crypto.randomUUID()};return Response.json({project:await saveProject({...p,findings:old?p.findings.map(x=>x.id===f.id?f:x):[...p.findings,f]},v.revision)})});

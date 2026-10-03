@@ -47,29 +47,51 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-// Source frame → screen pixels under object-fit: cover.
-const cover = (() => {
-  const s = Math.max(W / probe.width, H / probe.height);
-  const dw = probe.width * s, dh = probe.height * s;
-  return { map: (x: number, y: number) => ({ x: (W - dw) / 2 + x * dw, y: (H - dh) / 2 + y * dh }), px: dh };
-})();
+// ---------- sources ----------
+// The walkthrough, or one of the user's supporting clips/photos (normalized by ingest).
+type Source = { path: string; kind: "video" | "image"; width: number; height: number; duration: number; original: string };
+const walkthroughFile = readdirSync(join(job, "input")).find(f => f.startsWith("walkthrough.")) ?? "";
+const MAIN: Source = { path: "media/proxy.mp4", kind: "video", width: probe.width, height: probe.height, duration: probe.duration, original: join(job, "input", walkthroughFile) };
+const supporting = (optJson("analysis/supporting.json") ?? []) as { kind: string; path?: string; width?: number; height?: number; duration?: number }[];
+function sourceOf(src?: string): Source {
+  if (!src) return MAIN;
+  const item = supporting.find(i => i.path === src);
+  if (!item || !item.width || !item.height) { warnings.push(`unknown supporting source ${src}; using the walkthrough`); return MAIN; }
+  return { path: src, kind: item.kind === "image" ? "image" : "video", width: item.width, height: item.height, duration: item.duration ?? Infinity, original: join(job, src) };
+}
 
-// A zoom that brings (x,y) toward screen centre without exposing frame edges.
-function zoomTo(x: number, y: number, z: number) {
-  const p = cover.map(x, y);
-  const tx = clamp(W / 2 - p.x * z, W - W * z, 0), ty = clamp(H / 2 - p.y * z, H - H * z, 0);
+// Source frame → screen pixels. Landscape media fills the frame (cover); portrait phone
+// footage and photos are shown whole (contain) over a blurred copy of themselves.
+type Geometry = { fill: "cover" | "contain"; map: (x: number, y: number) => { x: number; y: number }; px: number; box: { x: number; y: number; w: number; h: number } };
+function geometry(src: Source): Geometry {
+  const fill = src.width / src.height >= 1.3 ? "cover" : "contain";
+  const s = fill === "cover" ? Math.max(W / src.width, H / src.height) : Math.min(W / src.width, H / src.height);
+  const dw = src.width * s, dh = src.height * s, ox = (W - dw) / 2, oy = (H - dh) / 2;
+  return { fill, map: (x, y) => ({ x: ox + x * dw, y: oy + y * dh }), px: dh, box: { x: ox, y: oy, w: dw, h: dh } };
+}
+const MAIN_GEO = geometry(MAIN);
+
+// A zoom that brings (x,y) toward screen centre while keeping the picture covering the frame
+// wherever it is big enough to.
+function zoomTo(geo: Geometry, x: number, y: number, z: number) {
+  const p = geo.map(x, y);
+  const axis = (target: number, lo: number, size: number, screen: number) =>
+    size * z >= screen ? clamp(screen / 2 - target * z, screen - (lo + size) * z, -lo * z) : screen / 2 - (lo + size / 2) * z;
+  const tx = axis(p.x, geo.box.x, geo.box.w, W), ty = axis(p.y, geo.box.y, geo.box.h, H);
   return { tx: r3(tx), ty: r3(ty), z, at: (q: { x: number; y: number }) => ({ x: q.x * z + tx, y: q.y * z + ty }) };
 }
 
-const stillCache = new Map<number, string>();
-function still(t: number) {
-  const key = Math.round(t * 100) / 100;
+// A full-resolution frame of a video source at time t (or the photo itself).
+const stillCache = new Map<string, string>();
+function still(t: number, src: Source = MAIN) {
+  if (src.kind === "image") return src.path;
+  const key = `${src.path}@${Math.round(t * 100) / 100}`;
   if (stillCache.has(key)) return stillCache.get(key)!;
-  const name = `assets/stills/t${key.toFixed(2).replace(".", "_")}.jpg`;
+  const tag = src === MAIN ? "" : src.path.replace(/^.*\//, "").replace(/\.\w+$/, "") + "-";
+  const name = `assets/stills/${tag}t${(Math.round(t * 100) / 100).toFixed(2).replace(".", "_")}.jpg`;
   const dest = join(out, name);
   if (!existsSync(dest)) {
-    const src = readdirSync(join(job, "input")).find(f => f.startsWith("walkthrough."));
-    execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", String(key), "-i", join(job, "input", src ?? ""), "-frames:v", "1",
+    execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", String(Math.round(t * 100) / 100), "-i", src.original, "-frames:v", "1",
       "-vf", "scale='min(3840,iw)':-2", "-q:v", "2", dest]);
   }
   stillCache.set(key, name);
@@ -82,7 +104,7 @@ for (const f of ["gsap.min.js", "fonts/InterVariable.ttf", "fonts/InterDisplay-B
   copyFileSync(join(HERE, "assets", f), join(out, "assets", f));
 }
 mkdirSync(join(out, "media"), { recursive: true });
-for (const f of ["proxy.mp4", "voice.wav"]) {
+for (const f of ["proxy.mp4", "voice.wav", "supporting"]) {
   const target = join(job, "media", f), link = join(out, "media", f);
   if (existsSync(target) && !existsSync(link)) {
     try { lstatSync(link); } catch { symlinkSync(relative(dirname(link), target), link); }
@@ -123,7 +145,7 @@ for (const scene of edit.scenes) {
   if (shots.length && need > natural + 0.05 && scene.type !== "overview" && scene.type !== "punchlist") {
     const last = shots[shots.length - 1];
     const wantOut = last.out + (need - natural) * last.speed;
-    const maxOut = probe.duration - 0.1;
+    const maxOut = sourceOf(last.src).duration - 0.1;
     last.out = Math.min(wantOut, maxOut);
     if (wantOut > maxOut) warnings.push(`${scene.id}: footage ran out before the narration ended.`);
     if (scene.type !== "title" && need - natural > 4) warnings.push(`${scene.id}: narration is ${(need - natural).toFixed(1)}s longer than the chosen shots; the last shot was extended. Consider adding a shot.`);
@@ -135,7 +157,7 @@ for (const scene of edit.scenes) {
     const covered = shots.reduce((a, s) => a + shotLen(s), 0);
     if (shots.length && covered < dur - 0.01) {
       const last = shots[shots.length - 1];
-      last.out = Math.min(probe.duration - 0.1, last.out + (dur - covered) * last.speed);
+      last.out = Math.min(sourceOf(last.src).duration - 0.1, last.out + (dur - covered) * last.speed);
     }
   }
   timed.push({ scene, start: r3(clock), dur: r3(dur), voStart: r3(clock + lead), shots });
@@ -150,12 +172,16 @@ let uid = 0;
 const id = (p: string) => `${p}-${++uid}`;
 let track = 0;
 
-function cam(src: string, kind: "video" | "img", start: number, dur: number, mediaStart = 0, rate = 1, extraClass = "") {
+function cam(src: string, kind: "video" | "img", start: number, dur: number, mediaStart = 0, rate = 1, extraClass = "", fill: Geometry["fill"] = "cover", backdrop?: string) {
   const camId = id("cam"), elId = id(kind === "video" ? "v" : "img");
   const timing = `data-start="${r3(start)}" data-duration="${r3(dur)}" data-track-index="${track++ % 4}"`;
+  const cls = `clip fill${fill === "contain" ? " contain" : ""}`;
   const media = kind === "video"
-    ? `<video id="${elId}" class="clip fill" src="${src}" ${timing} data-media-start="${r3(mediaStart)}"${rate !== 1 ? ` data-playback-rate="${rate}"` : ""} muted playsinline></video>`
-    : `<img id="${elId}" class="clip fill" src="${src}" ${timing} />`;
+    ? `<video id="${elId}" class="${cls}" src="${src}" ${timing} data-media-start="${r3(mediaStart)}"${rate !== 1 ? ` data-playback-rate="${rate}"` : ""} muted playsinline></video>`
+    : `<img id="${elId}" class="${cls}" src="${src}" ${timing} />`;
+  if (fill === "contain" && backdrop) {
+    html.push(`<div class="cam backdrop"><img id="${id("bd")}" class="clip fill" src="${backdrop}" data-start="${r3(start)}" data-duration="${r3(dur)}" data-track-index="4" /></div>`);
+  }
   html.push(`<div class="cam ${extraClass}" id="${camId}">${media}</div>`);
   return camId;
 }
@@ -167,7 +193,8 @@ function layer(start: number, dur: number, inner: string, cls = "") {
 }
 
 // Annotations drawn at screen positions; `map` converts source coords to screen.
-function annotations(list: Annotation[], start: number, dur: number, map: (p: { x: number; y: number }) => { x: number; y: number }, zoom = 1, avoidCard = true) {
+function annotations(list: Annotation[], start: number, dur: number, map: (p: { x: number; y: number }) => { x: number; y: number }, zoom = 1, avoidCard = true, geo: Geometry = MAIN_GEO) {
+  const cover = geo;
   if (!list.length) return;
   const parts: string[] = [];
   const anims: [string, number, string][] = [];
@@ -221,6 +248,7 @@ function annotations(list: Annotation[], start: number, dur: number, map: (p: { 
 // One shot: video, optional freeze (still + zoom + annotations), optional push.
 function renderShot(s: Shot, start: number, opts: { cardVisible: boolean }) {
   const len = shotLen(s);
+  const src = sourceOf(s.src), geo = geometry(src);
   const pieces: { kind: "video" | "still"; start: number; dur: number; media: number }[] = [];
   if (s.freeze) {
     const fa = (s.freeze.at - s.in) / s.speed;
@@ -233,15 +261,19 @@ function renderShot(s: Shot, start: number, opts: { cardVisible: boolean }) {
   for (const p of pieces) {
     const t = start + p.start;
     if (p.kind === "video") {
-      const c = cam("media/proxy.mp4", "video", t, p.dur, p.media, s.speed);
+      const backdrop = geo.fill === "contain" ? still(src.kind === "image" ? 0 : p.media, src) : undefined;
+      const c = src.kind === "image"
+        ? cam(src.path, "img", t, p.dur, 0, 1, "", geo.fill, backdrop)
+        : cam(src.path, "video", t, p.dur, p.media, s.speed, "", geo.fill, backdrop);
       if (s.push) {
-        const o = cover.map(s.push.x, s.push.y);
+        const o = geo.map(s.push.x, s.push.y);
         js.push(`tl.fromTo("#${c}",{scale:${s.push.from},transformOrigin:"${r3(o.x)}px ${r3(o.y)}px"},{scale:${s.push.to},duration:${r3(p.dur)},ease:"none"},${r3(t)});`);
       }
     } else {
       const f = s.freeze!;
-      const c = cam(still(f.at), "img", t, p.dur, 0, 1, "still");
-      const z = zoomTo(f.x, f.y, f.zoom);
+      const frame = still(f.at, src);
+      const c = cam(frame, "img", t, p.dur, 0, 1, "still", geo.fill, geo.fill === "contain" ? frame : undefined);
+      const z = zoomTo(geo, f.x, f.y, f.zoom);
       const zin = 0.75, zout = 0.45;
       const endsShot = p.start + p.dur >= len - 0.05;
       js.push(`tl.fromTo("#${c}",{x:0,y:0,scale:1,transformOrigin:"0px 0px"},{x:${z.tx},y:${z.ty},scale:${z.z},duration:${zin},ease:"power3.inOut"},${r3(t)});`);
@@ -251,10 +283,10 @@ function renderShot(s: Shot, start: number, opts: { cardVisible: boolean }) {
       const tag = layer(t, p.dur, `<div class="freeze-tag"><span class="freeze-dot"></span>Closer look</div>`);
       js.push(`tl.fromTo("#${tag} .freeze-tag",{opacity:0,y:-8},{opacity:1,y:0,duration:0.3},${r3(t + 0.2)});`);
       const annDur = p.dur - zin - (endsShot ? 0.1 : zout);
-      if (annDur > 0.5) annotations(f.annotations, t + zin, annDur, z.at, f.zoom, opts.cardVisible);
+      if (annDur > 0.5) annotations(f.annotations, t + zin, annDur, z.at, f.zoom, opts.cardVisible, geo);
     }
   }
-  if (s.annotations.length) annotations(s.annotations, start, len, q => q, 1, opts.cardVisible);
+  if (s.annotations.length) annotations(s.annotations, start, len, q => q, 1, opts.cardVisible, geo);
 }
 
 // Captions grouped into short phrases; the spoken word lights up.

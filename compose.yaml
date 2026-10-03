@@ -1,3 +1,6 @@
+# Inspect Flow: the web app plus the video worker, sharing one data volume.
+#   cp .env.example .env   # add OPENROUTER_API_KEY
+#   docker compose up -d --build
 services:
   app:
     build: .
@@ -9,14 +12,31 @@ services:
     environment:
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6.1-sol}
       DATA_DIR: /data
+      JOBS_DIR: /data/jobs
     volumes:
       - inspection-data:/data
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+
+  # Runs one job at a time: ingest, transcription, the AI director, rendering, the PDF.
+  worker:
+    build: ./pipeline
+    image: inspect-flow-worker:local
+    init: true
+    restart: unless-stopped
+    entrypoint: ["node", "/opt/pipeline/worker.mjs"]
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      AGENT_MODEL: ${AGENT_MODEL:-anthropic/claude-sonnet-5.5}
+      JOBS_DIR: /data/jobs
+    volumes:
+      - inspection-data:/data
+    shm_size: 2gb          # headless Chrome renders frames through /dev/shm
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   inspection-data:

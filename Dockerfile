@@ -17,7 +17,6 @@ COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/drizzle ./drizzle
-COPY --from=builder --chown=node:node /app/lib/inspection/prepare.py /app/lib/inspection/render.py ./lib/inspection/
 COPY --chown=node:node scripts/container-entrypoint.mjs ./scripts/container-entrypoint.mjs
 USER node
 EXPOSE 3000

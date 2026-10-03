@@ -40,6 +40,9 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules"
+    "data",
+    "node_modules",
+    "pipeline",
+    "work"
   ]
 }

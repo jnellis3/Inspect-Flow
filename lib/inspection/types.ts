@@ -1,31 +1,97 @@
-export type Decision = "pending" | "approved" | "dismissed";
-export type Finding = {
-  id: string; source?: "inspector" | "agent"; analysisJobId?:string; title: string; location: string; observation: string; evidence: string;
-  whyItMatters: string; recommendation: string; severity: "attention" | "maintenance" | "information";
-  timestamp: number; endTimestamp: number; confidence: string; decision: Decision;
-  pointer?: {x: number; y: number} | null;
-  diagram?: {cause: string; effect: string; action: string} | null;
-};
-export type Aerial = {status:"draft"|"confirmed";latitude:number;longitude:number;matchedAddress:string;year:string;attribution:string;imageKey:string;imageSha256:string;extent:{xmin:number;ymin:number;xmax:number;ymax:number};rasterId:number};
-export type Inspection = {
-  id: string; address: string; inspector: string; date: string; notes: string;
-  revision: number; createdAt: string; updatedAt: string;
-  video: {name: string; type: string; size: number; status: "awaiting_upload" | "ready"; duration?: number; uploadId?:string; parts?:{partNumber:number;etag:string}[]; fingerprint?:string} | null;
-  aerial?:Aerial|null; lastAnalysisJobId?:string; findings: Finding[]; coverage: string; transcript: string; narration: boolean;
-  messages: {id: string; role: "user" | "assistant"; text: string; at: string}[];
-};
-export type Job = {
-  id: string; projectId: string; kind: "analysis" | "chat" | "export" | "probe";
-  status: "starting" | "running" | "completed" | "failed" | "cancelled";
-  phase: string; sessionId: string | null; turnId: string | null; error: string | null;
-  createdAt: string; updatedAt: string; revision: number; result: Record<string, unknown>;
-};
-export type SavedFile = {id: string; projectId: string; name: string; mime: string; size: number; kind: string; revision: number};
-export type ProjectDetail = {project: Inspection; jobs: Job[]; files: SavedFile[]};
-export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
-export const MAX_DURATION = 90 * 60;
-export const MODEL = "gpt-6.1-sol";
-export function timestamp(value: number) {const s=Math.max(0,Math.floor(value)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;}
+// The app's domain model. A project is one inspection: its details, its uploads, and the
+// pipeline job that turns them into a highlight reel and a PDF report.
 
-export const UPLOAD_PART_BYTES=8*1024*1024;
-export const STAGING_PART_BYTES=40*1024*1024;
+export type VoiceMode = "ai" | "source";
+
+/** A file being (or already) uploaded in chunks. */
+export type Upload = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  status: "uploading" | "ready";
+  uploadId?: string;
+  parts?: { partNumber: number; etag: string }[];
+  fingerprint?: string;
+};
+
+export type Project = {
+  id: string;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  property: { address: string; city: string; kind: string };
+  inspection: { date: string; type: string };
+  company: { name: string; people: string[]; phone: string; website: string; accent: string };
+  voice: { mode: VoiceMode; voice: string };
+  notes: string;
+  video: Upload | null;
+  supporting: Upload[];
+};
+
+export type RunState = "idle" | "queued" | "running" | "done" | "failed" | "cancelled";
+
+/** Written by the pipeline worker into the job directory; read by the app. */
+export type RunStatus = {
+  state: RunState;
+  kind?: "produce" | "revise";
+  stage?: string | null;
+  activity?: string | null;
+  note?: string | null;
+  queuedAt?: string;
+  startedAt?: string;
+  finishedAt?: string | null;
+  error?: string | null;
+  costUsd?: number | null;
+};
+
+export type FindingSummary = {
+  id: string;
+  area: string;
+  title: string;
+  priority: "safety" | "repair" | "minor" | "monitor";
+  who: "builder" | "homeowner" | "specialist";
+  summary: string;
+  fix: string;
+  confidence: string;
+};
+
+export type ProjectDetail = {
+  project: Project;
+  run: RunStatus;
+  workerOnline: boolean;
+  outputs: { reel: boolean; report: boolean; poster: boolean; version: string | null };
+  findings: FindingSummary[];
+  positives: { title: string; area: string }[];
+  editorNotes: string;
+  revisions: { message: string; at: string }[];
+};
+
+export type ProjectListItem = Pick<Project, "id" | "property" | "inspection" | "updatedAt"> & {
+  state: RunState;
+  hasVideo: boolean;
+  poster: boolean;
+};
+
+/** Voices offered for AI narration (OpenAI voices via OpenRouter). */
+export const VOICES = [
+  { id: "ash", label: "Ash", description: "Warm, confident, male" },
+  { id: "coral", label: "Coral", description: "Bright, friendly, female" },
+  { id: "sage", label: "Sage", description: "Calm, measured, female" },
+  { id: "ballad", label: "Ballad", description: "Soft, gentle, male" },
+  { id: "verse", label: "Verse", description: "Expressive, male" },
+  { id: "shimmer", label: "Shimmer", description: "Clear, upbeat, female" },
+] as const;
+
+export const INSPECTION_TYPES = ["New construction", "Pre-purchase", "Pre-listing", "Warranty (11-month)", "Re-inspection", "Other"] as const;
+
+export const MAX_VIDEO_BYTES = 6 * 1024 * 1024 * 1024;
+export const MAX_SUPPORTING_BYTES = 1024 * 1024 * 1024;
+export const MAX_SUPPORTING_FILES = 30;
+export const UPLOAD_PART_BYTES = 8 * 1024 * 1024;
+export const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm", "video/x-m4v"] as const;
+export const SUPPORTING_TYPES = [
+  "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif",
+  "video/mp4", "video/quicktime", "video/webm", "video/x-m4v",
+  "application/pdf", "text/plain", "text/markdown",
+] as const;

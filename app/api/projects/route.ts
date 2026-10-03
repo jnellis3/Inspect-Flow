@@ -1,5 +1,26 @@
-import { z } from "zod";
-import { api,body,db,owner } from "@/lib/inspection/store";
-import type { Inspection } from "@/lib/inspection/types";
-export const GET=(req:Request)=>api(req,async()=>{const r=await db().prepare("SELECT data,revision,updated_at FROM projects WHERE owner = ? ORDER BY updated_at DESC LIMIT 100").bind(owner()).all<{data:string;revision:number;updated_at:string}>();return Response.json({projects:r.results.map(v=>{const p=JSON.parse(v.data) as Inspection;return {...p,revision:v.revision,updatedAt:v.updated_at,messages:[],transcript:""}})})});
-export const POST=(req:Request)=>api(req,async()=>{const v=await body(req,z.object({address:z.string().trim().min(1,"Add a property address or project name.").max(200),inspector:z.string().trim().max(100).default(""),date:z.string().max(30),notes:z.string().max(15000).default("")}));const now=new Date().toISOString();const p:Inspection={...v,id:crypto.randomUUID(),revision:1,createdAt:now,updatedAt:now,video:null,findings:[],coverage:"",transcript:"",narration:true,messages:[]};await db().prepare("INSERT INTO projects (id,owner,address,revision,data,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,owner(),p.address,1,JSON.stringify(p),now,now).run();return Response.json({project:p},{status:201})});
+import { api, body, insertProject, listProjects } from "@/lib/inspection/store";
+import { OUTPUTS, jobDir, readRun } from "@/lib/inspection/jobs";
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
+import type { Project, ProjectListItem } from "@/lib/inspection/types";
+import { ProjectFields } from "@/lib/inspection/fields";
+
+
+export const GET = (req: Request) => api(req, async () => {
+  const projects = await listProjects();
+  const items: ProjectListItem[] = await Promise.all(projects.map(async p => ({
+    id: p.id, property: p.property, inspection: p.inspection, updatedAt: p.updatedAt,
+    state: (await readRun(p.id)).state,
+    hasVideo: p.video?.status === "ready",
+    poster: !!(await stat(join(jobDir(p.id), OUTPUTS.poster.file)).catch(() => null)),
+  })));
+  return Response.json({ projects: items, defaults: projects[0] ? { company: projects[0].company, voice: projects[0].voice } : null });
+});
+
+export const POST = (req: Request) => api(req, async () => {
+  const fields = await body(req, ProjectFields);
+  const now = new Date().toISOString();
+  const project: Project = { ...fields, id: crypto.randomUUID(), revision: 1, createdAt: now, updatedAt: now, video: null, supporting: [] };
+  await insertProject(project);
+  return Response.json({ project }, { status: 201 });
+});

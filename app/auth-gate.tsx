@@ -1,7 +1,9 @@
 "use client";
 import {useEffect,useState,useCallback} from "react";
 import Link from "next/link";
-import {House,ShieldCheck,LoaderCircle,ArrowRight} from "lucide-react";
+import {Play,ShieldCheck,LoaderCircle,ArrowRight} from "lucide-react";
+import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
 
 type Account = {id:string;username:string};
 type AuthResponse = {account?:Account|null;registrationOpen:boolean;error?:string};
@@ -104,22 +106,28 @@ export default function AuthGate({children}:{children:(account:Account,logout:()
     };
   },[applyAuth]);
 
-  if (loading) return <div className="loading-state"><LoaderCircle className="spin"/><p>Opening your workspace…</p></div>;
-  if (account) return <>{children(account,logout)}{error && <div className="session-error" role="alert">{error}<button onClick={() => setError('')}>Dismiss</button></div>}</>;
-  return <main className="auth-page">
-    <Link href="/" className="brand"><span className="brand-mark"><House size={23}/></span><span>Inspect Flow<span className="brand-sub">INSPECTION STUDIO</span></span></Link>
-    <section className="auth-card">
-      <span className="eyebrow">YOUR INSPECTION WORKSPACE</span>
-      <h1>{mode === 'signup' ? 'Create your account.' : 'Welcome back.'}</h1>
-      <p>{mode === 'signup' ? 'Keep your inspections, evidence and reports together.' : 'Sign in to continue your inspections.'}</p>
-      <form onSubmit={submit} className="form-stack">
-        <label>Username<input value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} minLength={3} maxLength={40} required/></label>
-        <label>Passphrase<input type="password" aria-label="Passphrase" aria-describedby={mode === 'signup' ? 'passphrase-hint' : undefined} value={password} onChange={event => setPassword(event.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} minLength={mode === 'signup' ? 15 : 1} maxLength={128} required/>{mode === 'signup' && <small id="passphrase-hint">Use 15–128 characters. A few unrelated words work well. Store it in your password manager; recovery is not available yet.</small>}</label>
-        {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="btn primary" disabled={busy || (mode === 'signup' && !registrationOpen)}>{busy ? <LoaderCircle className="spin"/> : <ArrowRight/>}{mode === 'signup' ? 'Create account' : 'Sign in'}</button>
+  if (loading) return <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-muted-foreground"><LoaderCircle className="size-6 animate-spin" /><p className="text-sm">Opening your workspace…</p></div>;
+  if (account) return <>{children(account, logout)}{error && <div className="fixed bottom-5 left-5 z-50 flex items-center gap-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900 shadow-lg" role="alert">{error}<button className="font-semibold underline" onClick={() => setError('')}>Dismiss</button></div>}</>;
+  return <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-12">
+    <Link href="/" className="mb-10 flex items-center justify-center gap-3"><Logo /><span className="font-display text-2xl font-bold tracking-tight">Inspect Flow</span></Link>
+    <section className="rounded-2xl border bg-card p-7 shadow-[0_20px_60px_-30px_rgb(11_18_32/0.35)]">
+      <h1 className="font-display text-3xl font-bold">{mode === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">{mode === 'signup' ? 'Turn walkthroughs into videos and reports your clients will actually watch.' : 'Sign in to your inspection workspace.'}</p>
+      <form onSubmit={submit} className="mt-7 flex flex-col gap-5">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">Username
+          <Input value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} minLength={3} maxLength={40} required className="h-11 bg-white" /></label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">Passphrase
+          <Input type="password" aria-describedby={mode === 'signup' ? 'passphrase-hint' : undefined} value={password} onChange={event => setPassword(event.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} minLength={mode === 'signup' ? 15 : 1} maxLength={128} required className="h-11 bg-white" />
+          {mode === 'signup' && <small id="passphrase-hint" className="font-normal text-muted-foreground">15 or more characters. A few unrelated words work well. Keep it in your password manager; there’s no recovery yet.</small>}</label>
+        {error && <p className="rounded-lg bg-orange-50 px-3 py-2.5 text-sm text-orange-900" role="alert">{error}</p>}
+        <Button size="lg" className="h-11" disabled={busy || (mode === 'signup' && !registrationOpen)}>{busy ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}{mode === 'signup' ? 'Create account' : 'Sign in'}</Button>
       </form>
-      {registrationOpen && <p className="auth-switch">{mode === 'signup' ? 'Already have an account?' : 'New here?'} <button disabled={busy} onClick={() => {setMode(mode === 'signup' ? 'login' : 'signup');setError('');setPassword('');}}>{mode === 'signup' ? 'Sign in' : 'Create an account'}</button></p>}
+      {registrationOpen && <p className="mt-6 text-center text-sm text-muted-foreground">{mode === 'signup' ? 'Already have an account?' : 'New here?'} <button className="font-semibold text-foreground underline-offset-4 hover:underline" disabled={busy} onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setError(''); setPassword(''); }}>{mode === 'signup' ? 'Sign in' : 'Create an account'}</button></p>}
     </section>
-    <p className="auth-boundary"><ShieldCheck size={15}/>Your account provides access to your saved inspections.</p>
+    <p className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-3.5" />Your projects are private to your account.</p>
   </main>;
+}
+
+export function Logo({ className = "" }: { className?: string }) {
+  return <span className={`grid size-9 place-items-center rounded-xl bg-primary text-highlight ${className}`}><Play className="size-4 translate-x-px fill-current" /></span>;
 }

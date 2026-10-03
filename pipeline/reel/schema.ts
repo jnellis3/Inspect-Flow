@@ -35,7 +35,11 @@ export const Freeze = z.object({
   annotations: z.array(Annotation).default([]),
 });
 
+// A supporting clip or photo (analysis/supporting.json → path). Omit to use the walkthrough.
+const SupportingSrc = z.string().regex(/^media\/supporting\/[^/]+\.(mp4|jpg)$/);
+
 export const Shot = z.object({
+  src: SupportingSrc.optional(),  // photos: in/out only set how long it shows (out - in seconds)
   in: seconds,
   out: seconds,
   speed: z.number().min(0.25).max(4).default(1),
@@ -90,7 +94,7 @@ export const Finding = z.object({
   recommendation: z.string().max(300),
   fix: z.string().max(60),               // the one-line action shown on screen
   evidence: z.array(z.object({ in: seconds, out: seconds, quote: z.string().max(300).optional() })).min(1),
-  photo: z.object({ at: seconds, crop: z.object({ x: frac, y: frac, w: frac, h: frac }).optional(), annotations: z.array(Annotation).default([]) }),
+  photo: z.object({ src: SupportingSrc.optional(), at: seconds, crop: z.object({ x: frac, y: frac, w: frac, h: frac }).optional(), annotations: z.array(Annotation).default([]) }),
   confidence: z.enum(["confirmed", "likely", "possible"]),
 });
 export type Finding = z.infer<typeof Finding>;
@@ -99,7 +103,7 @@ export const Findings = z.object({
   version: z.literal(1),
   summary: z.string().max(600),           // the inspector's overall take, plain language
   findings: z.array(Finding).max(40),
-  positives: z.array(z.object({ id: z.string(), area: z.string(), title: z.string().max(64), note: z.string().max(300), at: seconds })).default([]),
+  positives: z.array(z.object({ id: z.string(), area: z.string(), title: z.string().max(64), note: z.string().max(300), at: seconds, src: SupportingSrc.optional() })).default([]),
   limitations: z.array(z.string().max(300)).default([]),
 });
 export type Findings = z.infer<typeof Findings>;

@@ -11,7 +11,6 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "test:smoke": "node scripts/smoke.mjs",
     "audit:privacy": "node scripts/privacy-audit.mjs"
   },
   "dependencies": {
@@ -27,7 +26,6 @@
     "lucide-react": "^1.31.0",
     "next": "16.3.4",
     "next-themes": "^0.4.6",
-    "openai": "7.25.0",
     "radix-ui": "^1.6.7",
     "react": "19.2.6",
     "react-day-picker": "^10.0.1",
@@ -53,5 +51,5 @@
     "typescript": "5.9.3"
   },
   "type": "module",
-  "description": "Self-hosted walkthrough inspection review and homeowner reports"
+  "description": "Self-hosted app that turns inspection walkthrough videos into narrated highlight reels and PDF reports"
 }

@@ -96,7 +96,7 @@ type RangeInput = { offset?: number; length?: number; suffix?: number };
 type ResolvedRange = { offset: number; length: number };
 type MultipartManifest = { version: 1; key: string; httpMetadata: HttpMetadata; completed?: ObjectMetadata; completionParts?: UploadedPart[] };
 type PartMetadata = UploadedPart & { file: string; size: number };
-const MAX_OBJECT_BYTES = 2 * 1024 * 1024 * 1024;
+const MAX_OBJECT_BYTES = 8 * 1024 * 1024 * 1024;
 const MAX_PART_BYTES = 64 * 1024 * 1024;
 const MAX_BUFFER_BYTES = 64 * 1024 * 1024;
 const locks = new Map<string, Promise<void>>();
@@ -224,6 +224,11 @@ export class LocalBucket {
       safeFile(metadata.file);
       return metadata;
     } catch (error) { if (missing(error)) return null; throw error; }
+  }
+  /** Absolute path of a stored object's bytes (for hard-linking into pipeline job directories). */
+  async path(key: string): Promise<string | null> {
+    const metadata = await this.metadata(key);
+    return metadata ? join(this.directory(key), safeFile(metadata.file)) : null;
   }
   async head(key: string): Promise<LocalObject | null> {
     const metadata = await this.metadata(key);

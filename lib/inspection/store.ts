@@ -1,20 +1,116 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
-import {assertRequestOrigin} from "./origin";
-import {AsyncLocalStorage} from "node:async_hooks";
-import {authenticate,type Account} from "./auth";
-import {runtime,AppError,db,bucket} from "./server";
-import type { Inspection, Job, SavedFile } from "./types";
-export {runtime,AppError,db,bucket} from "./server";
-const context=new AsyncLocalStorage<Account>();
-export const jobLease=new AsyncLocalStorage<{id:string;until:number}>();
-export function owner(){const account=context.getStore();if(!account)throw new AppError(401,"Sign in to your inspection account.");return account.id}
-export function mutation(request:Request){assertRequestOrigin(request);if(request.headers.get("x-inspection-request")!=="1")throw new AppError(403,"This request must come from this workspace.")}
-export async function body<T extends z.ZodTypeAny>(request:Request,schema:T):Promise<z.output<T>>{mutation(request);if(!request.headers.get("content-type")?.includes("application/json"))throw new AppError(415,"Expected JSON input.");const reader=request.body?.getReader();if(!reader)throw new AppError(400,"Expected input.");const chunks:Uint8Array[]=[];let size=0;while(true){const r=await reader.read();if(r.done)break;size+=r.value.byteLength;if(size>1024*1024){await reader.cancel();throw new AppError(413,"This input is too large.")}chunks.push(r.value)}const data=new Uint8Array(size);let offset=0;for(const chunk of chunks){data.set(chunk,offset);offset+=chunk.length}let value:unknown;try{value=JSON.parse(new TextDecoder().decode(data))}catch{throw new AppError(400,"This request could not be read.")}return schema.parse(value)}
-export async function api(request:Request,fn:()=>Promise<Response>,options:{public?:boolean}={}){let response:Response;try{if(!["GET","HEAD","OPTIONS"].includes(request.method))mutation(request);if(options.public)response=await fn();else{const account=await authenticate(request);if(!account)throw new AppError(401,"Sign in to your inspection account.");response=await context.run(account,fn)}}catch(e){if(e instanceof z.ZodError)response=Response.json({error:e.issues[0]?.message||"Please check the input."},{status:400});else if(e instanceof AppError)response=Response.json({error:e.message},{status:e.status});else{console.error("Inspection request failed",e instanceof Error?e.name:"unknown");response=Response.json({error:"The request could not finish. Your saved work is safe. Please retry."},{status:500})}}response.headers.set("Cache-Control","private, no-store");response.headers.set("X-Content-Type-Options","nosniff");return response}
-export async function getProject(id:string):Promise<Inspection>{const row=await db().prepare("SELECT data,revision,updated_at FROM projects WHERE id = ? AND owner = ?").bind(id,owner()).first<{data:string;revision:number;updated_at:string}>();if(!row)throw new AppError(404,"Inspection not found.");return {...JSON.parse(row.data),revision:row.revision,updatedAt:row.updated_at}}
-export async function saveProject(p:Inspection,expected:number){const now=new Date().toISOString();const next={...p,revision:expected+1,updatedAt:now};const r=await db().prepare("UPDATE projects SET data = ?, address = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND owner = ? AND revision = ?").bind(JSON.stringify(next),p.address,now,p.id,owner(),expected).run();if(r.meta.changes!==1)throw new AppError(409,"This inspection changed in another window. Refresh before saving again.");return next}
-export function jobRow(r:Record<string,unknown>):Job{return {id:String(r.id),projectId:String(r.project_id),kind:r.kind as Job['kind'],status:r.status as Job['status'],phase:String(r.phase),sessionId:r.session_id as string|null,turnId:r.turn_id as string|null,error:r.error as string|null,revision:Number(r.revision),result:JSON.parse(String(r.result)),createdAt:String(r.created_at),updatedAt:String(r.updated_at)}}
-export async function getJob(id:string){const row=await db().prepare("SELECT * FROM jobs WHERE id = ? AND owner = ?").bind(id,owner()).first<Record<string,unknown>>();if(!row)throw new AppError(404,"Job not found.");return jobRow(row)}
-export async function updateJob(j:Job,changes:Partial<Job>){const lease=jobLease.getStore();const fenced=lease?.id===j.id;const n={...j,...changes,updatedAt:new Date().toISOString()};const updated=await db().prepare("UPDATE jobs SET status = ?, phase = ?, session_id = ?, turn_id = ?, error = ?, result = ?, updated_at = ? WHERE id = ? AND owner = ?"+(fenced?" AND lease_until = ?":"")).bind(n.status,n.phase,n.sessionId,n.turnId,n.error,JSON.stringify(n.result),n.updatedAt,n.id,owner(),...(fenced?[lease.until]:[])).run();if(updated.meta.changes!==1)throw new AppError(404,"Job not found.");return n}
-export async function detail(id:string){const project=await getProject(id);const [js,fs]=await Promise.all([db().prepare("SELECT * FROM jobs WHERE project_id = ? AND owner = ? ORDER BY created_at DESC LIMIT 25").bind(id,owner()).all<Record<string,unknown>>(),db().prepare("SELECT id,project_id AS projectId,name,mime,size,kind,revision FROM files WHERE project_id = ? AND owner = ? AND (kind != 'export' OR EXISTS (SELECT 1 FROM jobs WHERE jobs.project_id = files.project_id AND jobs.revision = files.revision AND jobs.kind = 'export' AND jobs.status = 'completed')) ORDER BY created_at DESC").bind(id,owner()).all<SavedFile>()]);return {project,jobs:js.results.map(jobRow),files:fs.results}}
-export async function saveFile(projectId:string,revision:number,name:string,mime:string,kind:string,bytes:ReadableStream<Uint8Array>|ArrayBuffer|string,expectedSize?:number){const id=crypto.randomUUID();const key=`${projectId}/outputs/${id}`;let data=bytes;if(bytes instanceof ReadableStream && expectedSize!==undefined){let received=0;data=bytes.pipeThrough(new TransformStream<Uint8Array,Uint8Array>({transform(chunk,controller){received+=chunk.byteLength;if(received>expectedSize)throw new Error("Output exceeded expected size");controller.enqueue(chunk)},flush(){if(received!==expectedSize)throw new Error("Output size did not match")}}));}const object=await bucket().put(key,data,{httpMetadata:{contentType:mime}});if(!object)throw new AppError(503,"Output storage failed. Please retry importing the completed job.");try{await db().prepare("INSERT INTO files (id,project_id,owner,name,mime,size,key,kind,revision,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(id,projectId,owner(),name,mime,object.size,key,kind,revision,new Date().toISOString()).run()}catch(e){await bucket().delete(key);throw e}return {id,projectId,name,mime,size:object.size,kind,revision}}
+import { authenticate, type Account } from "./auth";
+import { assertRequestOrigin } from "./origin";
+import { AppError, db } from "./server";
+import type { Project } from "./types";
+
+export { AppError, bucket, db } from "./server";
+
+const context = new AsyncLocalStorage<Account>();
+
+/** The signed-in account for the current request. */
+export function owner() {
+  const account = context.getStore();
+  if (!account) throw new AppError(401, "Sign in to your account.");
+  return account.id;
+}
+
+/** State-changing requests must come from this app's own pages. */
+export function mutation(request: Request) {
+  assertRequestOrigin(request);
+  if (request.headers.get("x-inspection-request") !== "1") throw new AppError(403, "This request must come from this workspace.");
+}
+
+/** Read a small JSON body (≤ 1 MiB) and validate it. */
+export async function body<T extends z.ZodTypeAny>(request: Request, schema: T): Promise<z.output<T>> {
+  mutation(request);
+  if (!request.headers.get("content-type")?.includes("application/json")) throw new AppError(415, "Expected JSON input.");
+  const text = await readLimited(request, 1024 * 1024);
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { throw new AppError(400, "This request could not be read."); }
+  return schema.parse(value);
+}
+
+async function readLimited(request: Request, limit: number) {
+  const reader = request.body?.getReader();
+  if (!reader) throw new AppError(400, "Expected input.");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) { await reader.cancel(); throw new AppError(413, "This input is too large."); }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** Wrap a route handler: authentication, origin checks, and consistent error responses. */
+export async function api(request: Request, fn: () => Promise<Response>, options: { public?: boolean } = {}) {
+  let response: Response;
+  try {
+    if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) mutation(request);
+    if (options.public) response = await fn();
+    else {
+      const account = await authenticate(request);
+      if (!account) throw new AppError(401, "Sign in to your account.");
+      response = await context.run(account, fn);
+    }
+  } catch (e) {
+    if (e instanceof z.ZodError) response = Response.json({ error: e.issues[0]?.message || "Please check the input." }, { status: 400 });
+    else if (e instanceof AppError) response = Response.json({ error: e.message }, { status: e.status });
+    else {
+      console.error("Request failed", e);
+      response = Response.json({ error: "The request could not finish. Your saved work is safe. Please retry." }, { status: 500 });
+    }
+  }
+  response.headers.set("Cache-Control", "private, no-store");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  return response;
+}
+
+// ---------- projects ----------
+
+export async function getProject(id: string): Promise<Project> {
+  const row = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE id = ? AND owner = ?")
+    .bind(id, owner()).first<{ data: string; revision: number; updated_at: string }>();
+  if (!row) throw new AppError(404, "Project not found.");
+  return { ...JSON.parse(row.data), revision: row.revision, updatedAt: row.updated_at };
+}
+
+/** Optimistic write: fails with 409 if someone saved since `expected` was read. */
+export async function saveProject(p: Project, expected: number): Promise<Project> {
+  const now = new Date().toISOString();
+  const next = { ...p, revision: expected + 1, updatedAt: now };
+  const result = await db().prepare("UPDATE projects SET data = ?, address = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND owner = ? AND revision = ?")
+    .bind(JSON.stringify(next), p.property.address, now, p.id, owner(), expected).run();
+  if (result.meta.changes !== 1) throw new AppError(409, "This project changed in another window. Refresh and try again.");
+  return next;
+}
+
+/** Apply a change to the latest version of a project, retrying if a concurrent save wins. */
+export async function updateProject(id: string, change: (p: Project) => Project): Promise<Project> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const current = await getProject(id);
+    try { return await saveProject(change(current), current.revision); }
+    catch (e) { if (!(e instanceof AppError && e.status === 409)) throw e; }
+  }
+  throw new AppError(409, "This project is busy. Please retry.");
+}
+
+export async function insertProject(p: Project) {
+  await db().prepare("INSERT INTO projects (id, owner, address, revision, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(p.id, owner(), p.property.address, p.revision, JSON.stringify(p), p.createdAt, p.updatedAt).run();
+}
+
+export async function listProjects(): Promise<Project[]> {
+  const rows = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE owner = ? ORDER BY updated_at DESC LIMIT 200")
+    .bind(owner()).all<{ data: string; revision: number; updated_at: string }>();
+  return rows.results.map(r => ({ ...JSON.parse(r.data), revision: r.revision, updatedAt: r.updated_at }));
+}
+
+export async function deleteProject(id: string) {
+  await db().prepare("DELETE FROM projects WHERE id = ? AND owner = ?").bind(id, owner()).run();
+}

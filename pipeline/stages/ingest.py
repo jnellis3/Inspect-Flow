@@ -6,6 +6,8 @@ Outputs: <job>/media/proxy.mp4        1080p H.264, 1s GOP: fast, frame-accurate 
          <job>/analysis/probe.json    source facts (duration, size, rotation, fps, audio)
          <job>/analysis/shots.json    hard-cut boundaries, so edits don't straddle a cut
          <job>/analysis/filmstrip/    timestamped contact sheets (1 frame / 2 s) for the agent's first look
+         <job>/media/supporting/      the user's extra clips (1080p H.264) and photos (oriented JPEG)
+         <job>/analysis/supporting.json  what those are: kind, path, size, duration
 
 Every step is skipped when its output already exists, so the stage is resumable.
 """
@@ -16,7 +18,7 @@ import pathlib
 import re
 import shutil
 import subprocess
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 FONT = pathlib.Path(__file__).resolve().parent.parent / "reel" / "assets" / "fonts" / "Inter.ttf"
 
@@ -115,6 +117,47 @@ def filmstrip(proxy, duration, outdir, every=2, cols=5, rows=6):
     return sheets
 
 
+VIDEO_EXT = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi"}
+IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+DOC_EXT = {".pdf", ".txt", ".md"}
+
+
+def supporting(job):
+    """Normalize the user's extra media so the renderer and the agent can use it directly."""
+    src_dir, out_dir = job / "supporting", job / "media" / "supporting"
+    items = []
+    if not src_dir.is_dir():
+        return items
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for f in sorted(src_dir.iterdir()):
+        ext, stem = f.suffix.lower(), "".join(c if c.isalnum() or c in "-_" else "_" for c in f.stem)[:60]
+        try:
+            if ext in VIDEO_EXT:
+                dest = out_dir / f"{stem}.mp4"
+                if not dest.exists():
+                    make_proxy(f, dest, probe(f))
+                info = probe(dest)
+                items.append({"name": f.name, "kind": "video", "path": str(dest.relative_to(job)), "duration": round(info["duration"], 2), "width": info["width"], "height": info["height"]})
+            elif ext in IMAGE_EXT:
+                dest = out_dir / f"{stem}.jpg"
+                if not dest.exists():
+                    try:
+                        import pillow_heif
+                        pillow_heif.register_heif_opener()
+                    except ImportError:
+                        pass
+                    img = ImageOps.exif_transpose(Image.open(f)).convert("RGB")
+                    img.thumbnail((3840, 3840))
+                    img.save(dest, quality=90)
+                w, h = Image.open(dest).size
+                items.append({"name": f.name, "kind": "image", "path": str(dest.relative_to(job)), "width": w, "height": h})
+            elif ext in DOC_EXT:
+                items.append({"name": f.name, "kind": "document", "path": str(f.relative_to(job))})
+        except Exception as e:  # one bad attachment shouldn't sink the job
+            items.append({"name": f.name, "kind": "unreadable", "error": str(e)[:200]})
+    return items
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("job", type=pathlib.Path)
@@ -142,7 +185,9 @@ def main():
     if not (analysis / "filmstrip" / "index.json").exists():
         sheets = filmstrip(proxy, info["duration"], analysis / "filmstrip")
         (analysis / "filmstrip" / "index.json").write_text(json.dumps(sheets, indent=1))
-    print(json.dumps({"duration": info["duration"], "size": [info["width"], info["height"]], "audio": info["hasAudio"]}))
+    extras = supporting(job)
+    (analysis / "supporting.json").write_text(json.dumps(extras, indent=1))
+    print(json.dumps({"duration": info["duration"], "size": [info["width"], info["height"]], "audio": info["hasAudio"], "supporting": len(extras)}))
 
 
 if __name__ == "__main__":

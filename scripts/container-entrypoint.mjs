@@ -6,5 +6,4 @@ if(origin.protocol!=="https:"&&!(origin.protocol==="http:"&&["localhost","127.0.
 const data=process.env.DATA_DIR||"/data";
 await mkdir(data,{recursive:true,mode:0o700});
 await access(data,constants.R_OK|constants.W_OK);
-if(process.env.OPENAI_API_KEY_FILE)await access(process.env.OPENAI_API_KEY_FILE,constants.R_OK);
 await import("../server.js");

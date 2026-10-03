@@ -9,6 +9,8 @@
                                           (sharpest frame outlined) above a full-resolution, gridded
                                           still of that sharpest frame. Many windows per call.
 
+  frames <job> --src media/supporting/roof.jpg --grid   a supporting photo (time ignored) or clip
+
 Prints the path of the image it wrote (under <job>/scratch/frames/).
 Coordinates are always fractions of the full frame: x=0 left, x=1 right, y=0 top, y=1 bottom.
 """
@@ -119,6 +121,7 @@ def main():
     ap.add_argument("times", nargs="*", type=float)
     ap.add_argument("--range", nargs=2, type=float)
     ap.add_argument("--evidence", nargs="+", metavar="A-B")
+    ap.add_argument("--src", help="a supporting clip or photo (path from analysis/supporting.json)")
     ap.add_argument("--step", type=float, default=1.0)
     ap.add_argument("--crop", help="x,y,w,h fractions of the frame")
     ap.add_argument("--grid", action="store_true")
@@ -138,17 +141,28 @@ def main():
         a, b = args.range
         n = int(round((b - a) / args.step)) + 1
         times += [round(a + i * args.step, 3) for i in range(min(n, 48))]
-    if not times:
+    if not times and not args.src:
         raise SystemExit("Give one or more times, or --range A B.")
-    duration = json.loads((args.job / "analysis" / "probe.json").read_text())["duration"]
-    times = [min(max(0, t), duration - 0.05) for t in times]
+    if args.src:
+        src_path = args.job / args.src
+        if not src_path.exists():
+            raise SystemExit(f"No such supporting file: {args.src}")
+        if src_path.suffix.lower() == ".jpg":
+            times = [0.0]
+            duration = 1.0
+        else:
+            info = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(src_path)], capture_output=True, text=True).stdout)
+            duration = float(info["format"]["duration"])
+    else:
+        duration = json.loads((args.job / "analysis" / "probe.json").read_text())["duration"]
+    times = [min(max(0, t), duration - 0.05) for t in times or [0.0]]
     region = tuple(float(v) for v in args.crop.split(",")) if args.crop else (0, 0, 1, 1)
     # Single frames come from the full-resolution original (detail for crops and stills);
     # strips and sheets use the 1080p proxy, which seeks an order of magnitude faster.
-    src = source(args.job) if len(times) == 1 else args.job / "media" / "proxy.mp4"
+    src = args.job / args.src if args.src else source(args.job) if len(times) == 1 else args.job / "media" / "proxy.mp4"
 
     def cropped(t):
-        img = grab(src, t)
+        img = Image.open(src).convert("RGB") if src.suffix.lower() == ".jpg" else grab(src, t)
         W, H = img.size
         x, y, w, h = region
         return t, img.crop((int(x * W), int(y * H), int((x + w) * W), int((y + h) * H)))
