@@ -41,7 +41,7 @@ export default function ProjectView({ id }: { id: string }) {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Projects</Link>
+      <Link href="/projects" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Projects</Link>
       <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
@@ -94,7 +94,7 @@ function DeleteButton({ id, disabled }: { id: string; disabled: boolean }) {
     <Button variant={armed ? "destructive" : "ghost"} size="sm" disabled={disabled} onClick={async () => {
       if (!armed) return setArmed(true);
       await request(`/api/projects/${id}`, { method: "DELETE" });
-      router.push("/");
+      router.push("/projects");
     }}><Trash2 />{armed ? "Click again to delete" : "Delete"}</Button>
   );
 }

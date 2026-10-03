@@ -3,6 +3,7 @@ import {useEffect,useState,useCallback} from "react";
 import Link from "next/link";
 import {Play,ShieldCheck,LoaderCircle,ArrowRight} from "lucide-react";
 import {Button} from "@/components/ui/button";
+import {cn} from "@/lib/utils";
 import {Input} from "@/components/ui/input";
 
 type Account = {id:string;username:string};
@@ -129,5 +130,5 @@ export default function AuthGate({children}:{children:(account:Account,logout:()
 }
 
 export function Logo({ className = "" }: { className?: string }) {
-  return <span className={`grid size-9 place-items-center rounded-xl bg-primary text-highlight ${className}`}><Play className="size-4 translate-x-px fill-current" /></span>;
+  return <span className={cn("grid size-9 place-items-center rounded-xl bg-primary text-highlight", className)}><Play className="size-4 translate-x-px fill-current" /></span>;
 }

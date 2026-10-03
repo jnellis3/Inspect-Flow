@@ -12,7 +12,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         <div className="min-h-dvh">
           <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
             <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
-              <Link href="/" className="flex items-center gap-2.5">
+              <Link href="/projects" className="flex items-center gap-2.5">
                 <Logo className="size-8" />
                 <span className="font-display text-lg font-bold tracking-tight">Inspect Flow</span>
               </Link>

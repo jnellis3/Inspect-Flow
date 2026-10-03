@@ -13,8 +13,10 @@ const patterns=[
  ['credential URL',/https?:\/\/[^\s/:]+:[^\s/@]+@/],
 ];
 const failures=[];
+// Published marketing assets are intentionally public.
+const publicMedia=/^public\/marketing\/[^/]+\.(?:mp4|jpg|png|webp)$/;
 for(const path of files){
- if(path!=='.env.example'&&forbiddenPath.test(path))failures.push(`${path}: runtime/private file must not be tracked`);
+ if(path!=='.env.example'&&!publicMedia.test(path)&&forbiddenPath.test(path))failures.push(`${path}: runtime/private file must not be tracked`);
  const bytes=readFileSync(path);if(bytes.includes(0))continue;
  const text=bytes.toString('utf8');for(const [label,pattern] of patterns)if(pattern.test(text))failures.push(`${path}: ${label}`);
 }
@@ -24,7 +26,7 @@ for(const commit of commits){
  if(emails.some(email=>!email.endsWith('@users.noreply.github.com')))failures.push(`${commit.slice(0,12)}: use a GitHub noreply commit email`);
  const paths=execFileSync('git',['ls-tree','-r','--name-only',commit],{encoding:'utf8'}).trim().split('\n').filter(Boolean);
  for(const path of paths){
-  if(path!=='.env.example'&&forbiddenPath.test(path))failures.push(`${commit.slice(0,12)}:${path}: private file in history`);
+  if(path!=='.env.example'&&!publicMedia.test(path)&&forbiddenPath.test(path))failures.push(`${commit.slice(0,12)}:${path}: private file in history`);
   const bytes=execFileSync('git',['show',`${commit}:${path}`],{maxBuffer:8*1024*1024});if(bytes.includes(0))continue;
   for(const [label,pattern]of patterns)if(pattern.test(bytes.toString('utf8')))failures.push(`${commit.slice(0,12)}:${path}: ${label}`);
  }
