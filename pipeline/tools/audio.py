@@ -89,11 +89,10 @@ def word_times(wav):
     global _whisper
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "stages"))
     if _whisper is None:
-        from transcribe import preload_cuda_libs
+        from transcribe import pick_device, preload_cuda_libs
         preload_cuda_libs()
-        import ctranslate2
         from faster_whisper import WhisperModel
-        cuda = ctranslate2.get_cuda_device_count() > 0
+        cuda = pick_device() == "cuda"
         _whisper = WhisperModel("small.en", device="cuda" if cuda else "cpu", compute_type="float16" if cuda else "int8")
     import numpy as np
     pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(wav), "-ac", "1", "-ar", "16000", "-f", "s16le", "-"], capture_output=True, check=True).stdout

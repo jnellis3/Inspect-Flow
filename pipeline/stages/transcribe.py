@@ -28,6 +28,22 @@ def preload_cuda_libs():
                 pass
 
 
+def pick_device():
+    """WHISPER_DEVICE if set; otherwise CUDA only when a GPU *and* its libraries are usable.
+    (A GPU pod without cuBLAS would otherwise fail mid-transcription.)"""
+    wanted = os.environ.get("WHISPER_DEVICE", "auto")
+    if wanted != "auto":
+        return wanted
+    import ctranslate2
+    if ctranslate2.get_cuda_device_count() == 0:
+        return "cpu"
+    try:
+        ctypes.CDLL("libcublas.so.12")
+        return "cuda"
+    except OSError:
+        return "cpu"
+
+
 def stamp(t):
     t = int(t)
     return f"{t // 60:02}:{t % 60:02}"
@@ -37,7 +53,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("job", type=pathlib.Path)
     ap.add_argument("--model", default=os.environ.get("WHISPER_MODEL", "auto"))
-    ap.add_argument("--device", default=os.environ.get("WHISPER_DEVICE", "auto"))
+    ap.add_argument("--device", default="auto")
     args = ap.parse_args()
 
     audio = args.job / "media" / "audio16k.wav"
@@ -46,11 +62,7 @@ def main():
 
     preload_cuda_libs()
     from faster_whisper import WhisperModel
-    import ctranslate2
-
-    device = args.device
-    if device == "auto":
-        device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
+    device = pick_device() if args.device == "auto" else args.device
     compute = "float16" if device == "cuda" else "int8"
     if args.model == "auto":  # medium is worth it on a GPU; small keeps CPU-only hosts fast
         args.model = "medium.en" if device == "cuda" else "small.en"
