@@ -1,0 +1,16 @@
+**
+!package.json
+!package-lock.json
+!.npmrc
+!next.config.ts
+!next-env.d.ts
+!tsconfig.json
+!postcss.config.mjs
+!app/**
+!components/**
+!hooks/**
+!lib/**
+!public/**
+!vendor/**
+!drizzle/*.sql
+!scripts/container-entrypoint.mjs

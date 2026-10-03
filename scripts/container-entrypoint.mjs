@@ -1,0 +1,10 @@
+import {access, mkdir} from "node:fs/promises";
+import {constants} from "node:fs";
+const origin=new URL(process.env.APP_ORIGIN||"http://localhost:3000");
+if(origin.username||origin.password||origin.pathname!=="/"||origin.search||origin.hash)throw new Error("APP_ORIGIN must be an origin without credentials, a path, query, or fragment.");
+if(origin.protocol!=="https:"&&!(origin.protocol==="http:"&&["localhost","127.0.0.1","[::1]"].includes(origin.hostname)))throw new Error("Use HTTPS for APP_ORIGIN outside localhost.");
+const data=process.env.DATA_DIR||"/data";
+await mkdir(data,{recursive:true,mode:0o700});
+await access(data,constants.R_OK|constants.W_OK);
+if(process.env.OPENAI_API_KEY_FILE)await access(process.env.OPENAI_API_KEY_FILE,constants.R_OK);
+await import("../server.js");
