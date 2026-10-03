@@ -4,7 +4,7 @@
 // status.json once a job is queued and writes results to out/.
 import { copyFile, link, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { AppError, bucket, jobsDir } from "./server";
+import { AppError, bucket, jobsDir, remoteWorkers } from "./server";
 import type { FindingSummary, Project, ProjectDetail, RunStatus } from "./types";
 
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -31,8 +31,10 @@ export async function readRun(projectId: string): Promise<RunStatus> {
   return (await readJson<RunStatus>(join(jobDir(projectId), "status.json"))) ?? { state: "idle" };
 }
 
-/** The worker touches a heartbeat file every few seconds while it is alive. */
+/** The worker touches a heartbeat file every few seconds while it is alive. In RunPod mode the
+ *  dispatcher starts engines on demand, so "no worker right now" is normal, not an outage. */
 export async function workerOnline() {
+  if (process.env.WORKER_MODE === "runpod") return true;
   try { return Date.now() - (await stat(join(jobsDir(), ".worker-heartbeat"))).mtimeMs < 30_000; } catch { return false; }
 }
 
@@ -138,7 +140,11 @@ export async function cancelRun(projectId: string) {
   const dir = jobDir(projectId);
   const run = await readRun(projectId);
   if (run.state === "queued") await writeJson(join(dir, "status.json"), { ...run, state: "cancelled", finishedAt: new Date().toISOString() });
-  else if (run.state === "running") await writeFile(join(dir, "cancel"), "");
+  else if (run.state === "running") {
+    await writeFile(join(dir, "cancel"), "");
+    // A remote worker learns about the cancel on its next report; stop showing progress now.
+    if (remoteWorkers()) await writeJson(join(dir, "status.json"), { ...run, note: "Stopping…" });
+  }
   else throw new AppError(409, "Nothing is running.");
 }
 

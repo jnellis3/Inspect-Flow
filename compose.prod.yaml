@@ -1,0 +1,33 @@
+# Production: the web app only. Video jobs run on on-demand RunPod pods that pull the worker
+# image (ghcr.io/<owner>/inspect-flow-worker) and talk to the app over HTTPS.
+# The app image is published by CI on every push to main; scripts/autodeploy.sh keeps it current.
+#   .env: APP_ORIGIN, BIND_ADDRESS, OPENROUTER_API_KEY, RUNPOD_API_KEY
+#   docker compose -f compose.prod.yaml up -d          (add --build to build locally instead)
+services:
+  app:
+    build: .
+    image: ${APP_IMAGE:-ghcr.io/jnellis3/inspect-flow:latest}
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN to the public https:// origin}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      DATA_DIR: /data
+      JOBS_DIR: /data/jobs
+      WORKER_MODE: runpod
+      RUNPOD_API_KEY: ${RUNPOD_API_KEY:?set RUNPOD_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY}
+      AGENT_MODEL: ${AGENT_MODEL:-anthropic/claude-sonnet-5.5}
+      WORKER_IMAGE: ${WORKER_IMAGE:-ghcr.io/jnellis3/inspect-flow-worker:latest}
+      RUNPOD_GPU_TYPES: ${RUNPOD_GPU_TYPES:-}
+      RUNPOD_CLOUD_TYPE: ${RUNPOD_CLOUD_TYPE:-SECURE}
+    volumes:
+      - inspection-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  inspection-data:

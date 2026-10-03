@@ -6,6 +6,9 @@ export { AppError } from "./local-storage";
 /** Root of all persistent state: SQLite, uploaded objects, and pipeline job directories. */
 export const dataDir = () => resolve(process.env.DATA_DIR || "./data");
 
+/** Workers reach the app over HTTPS (e.g. RunPod pods) instead of sharing the data volume. */
+export const remoteWorkers = () => ["runpod", "remote"].includes(process.env.WORKER_MODE ?? "");
+
 /** Where the app hands work to the pipeline worker (one directory per project). */
 export const jobsDir = () => resolve(process.env.JOBS_DIR || `${dataDir()}/jobs`);
 

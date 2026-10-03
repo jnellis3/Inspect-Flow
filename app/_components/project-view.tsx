@@ -261,7 +261,7 @@ function Progress({ run, onCancel }: { run: RunStatus; onCancel: () => Promise<v
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-primary px-6 py-5 text-primary-foreground">
         <div>
           <h2 className="text-lg font-semibold">{run.state === "queued" ? "Waiting to start" : run.kind === "revise" ? "Making your changes" : "Making your video"}</h2>
-          <p className="text-sm text-white/70">{run.state === "queued" ? "It will start as soon as the video engine is free." : `${minutes} min so far · usually 30–60 min. You can close this page; it keeps going.`}</p>
+          <p className="text-sm text-white/70">{run.state === "queued" ? (run.note ?? "It will start as soon as the video engine is free.") : `${minutes} min so far · usually 30–60 min. You can close this page; it keeps going.`}</p>
         </div>
         <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 hover:text-white" onClick={onCancel}><Square className="fill-current" />Stop</Button>
       </div>

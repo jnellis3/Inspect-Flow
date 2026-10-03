@@ -44,6 +44,44 @@ recovery yet.
 Typical job: 30–60 minutes for a 10-minute walkthrough, a few dollars of API usage with the default
 Sonnet 5.5 director. Set `AGENT_MODEL=anthropic/claude-opus-5.5` for the premium director.
 
+## Production: app on a small server, video engines on RunPod
+
+The video worker needs real CPU and memory only while a video is being made, so in production
+the app runs alone on a small server and starts a **RunPod** GPU pod per batch of work:
+
+```
+ Caddy (TLS) ──► app (compose.prod.yaml) ──REST──► RunPod: starts/terminates pods on demand
+                   ▲  /api/worker/* (token)                │
+                   └───────────────────────────────────────┘ pod pulls ghcr.io/<owner>/inspect-flow-worker,
+                                                             claims a job, uploads results, idles out
+```
+
+```sh
+git clone https://github.com/jnellis3/Inspect-Flow.git && cd Inspect-Flow
+cat > .env <<EOF   # chmod 600
+APP_ORIGIN=https://your.domain
+BIND_ADDRESS=<private IP your proxy can reach>
+OPENROUTER_API_KEY=...
+RUNPOD_API_KEY=...
+EOF
+docker compose -f compose.prod.yaml up -d
+scripts/install-autodeploy.sh        # optional: deploy every push to main automatically
+```
+
+- **CI/CD:** every push to `main` runs the checks and, only if they pass, publishes
+  `ghcr.io/<owner>/inspect-flow` (app) and `ghcr.io/<owner>/inspect-flow-worker` (worker). With
+  autodeploy installed, the server fast-forwards its checkout and pulls the new app image within
+  two minutes (`journalctl -u inspect-flow-deploy`); new RunPod pods always start from the
+  newest worker image. Both GHCR packages must be **public** so the server and RunPod can pull them.
+- Pods reach the app at `APP_ORIGIN` (override with `WORKER_APP_URL`) using a token the app
+  generates and stores on its volume. A pod is terminated 4 minutes after the queue empties;
+  one that never connects is replaced; a job whose worker goes silent is requeued.
+- Pod shape: `RUNPOD_GPU_TYPES` (comma-separated RunPod GPU ids; default A4000/A4500/A5000/
+  4000 Ada/3090), `RUNPOD_CLOUD_TYPE` (`SECURE`), `RUNPOD_DISK_GB` (80), `RUNPOD_MIN_VCPU` (8),
+  `RUNPOD_MIN_RAM_GB` (24). Roughly $0.25/h while a job runs.
+- Revisions work across pods: after each run the worker uploads the agent's working state
+  (session, edit, audio) to the app, and the next pod restores it.
+
 ## Configuration (`.env`)
 
 | Variable | Default | Purpose |

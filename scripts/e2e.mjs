@@ -63,6 +63,7 @@ await upload(project.id, "video", video);
 for (const extra of extras) await upload(project.id, "supporting", extra);
 await call(`/api/projects/${project.id}/run`, { method: "POST", body: { action: "produce" } });
 
+async function waitForRun(label) {
 const started = Date.now();
 let last = "";
 for (;;) {
@@ -75,10 +76,21 @@ for (;;) {
     const report = await call(`/api/projects/${project.id}/output/report`);
     const range = await fetch(`${origin}/api/projects/${project.id}/output/reel`, { headers: { Cookie: cookie, Range: "bytes=0-99" } });
     console.log(JSON.stringify({
-      project: project.id, findings: detail.findings.length, reelBytes: reel.byteLength, reportBytes: report.byteLength,
-      rangeStatus: range.status, costUsd: detail.run.costUsd, minutes: +((Date.now() - started) / 60000).toFixed(1),
+      run: label, project: project.id, findings: detail.findings.length, reelBytes: reel.byteLength, reportBytes: report.byteLength,
+      rangeStatus: range.status, costUsd: detail.run.costUsd, version: detail.outputs.version, minutes: +((Date.now() - started) / 60000).toFixed(1),
     }));
-    break;
+    return detail;
   }
   await new Promise(r => setTimeout(r, 10_000));
+}
+}
+
+const first = await waitForRun("produce");
+// Optional: ask for changes and check the revision produces a new video.
+if (process.env.E2E_REVISE) {
+  if (process.env.E2E_BEFORE_REVISE) { const { execSync } = await import("node:child_process"); execSync(process.env.E2E_BEFORE_REVISE, { stdio: "inherit" }); }
+  await call(`/api/projects/${project.id}/run`, { method: "POST", body: { action: "revise", message: process.env.E2E_REVISE } });
+  const second = await waitForRun("revise");
+  if (second.outputs.version === first.outputs.version) throw new Error("revision did not produce a new video");
+  console.log("revision produced a new video");
 }
