@@ -2,7 +2,7 @@
 // pod that never connects or goes silent, and terminate it once the queue has been empty for a
 // few minutes. Pods run the worker image in remote mode and talk to the app over HTTPS, so you
 // only pay for GPU time while a video is being made.
-import { readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { jobsDir } from "./server";
 import { listJobs, workerToken } from "./worker-api";
@@ -85,6 +85,7 @@ async function heartbeatAt() {
 }
 
 export async function tick() {
+  await mkdir(jobsDir(), { recursive: true });
   const now = Date.now();
   const jobs = await listJobs();
   const engine = await readEngine();
