@@ -11,6 +11,7 @@ import { pipeline } from "node:stream/promises";
 import { AppError, jobsDir, remoteWorkers } from "./server";
 import { jobDir, readRun } from "./jobs";
 import type { RunStatus } from "./types";
+import { projectOwner, pushIfReady } from "./spectora/store";
 
 /** The shared secret workers present. From WORKER_TOKEN, or generated once and kept on the volume. */
 let cachedToken: string | null = null;
@@ -100,6 +101,11 @@ export async function reportStatus(projectId: string, workerId: string, patch: R
   const cancelFile = join(jobDir(projectId), "cancel");
   const cancel = !!(await stat(cancelFile).catch(() => null));
   if (clean.state && clean.state !== "running") await rm(cancelFile, { force: true });
+  if (clean.state === "done") {
+    // Follow-ups that need the finished outputs, e.g. attaching the reel to the Spectora inspection.
+    const account = await projectOwner(projectId);
+    if (account) void pushIfReady(projectId, account).catch(e => console.error("Post-run follow-up failed", projectId, e));
+  }
   return { cancel };
 }
 

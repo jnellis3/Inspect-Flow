@@ -82,6 +82,31 @@ scripts/install-autodeploy.sh        # optional: deploy every push to main autom
 - Revisions work across pods: after each run the worker uploads the agent's working state
   (session, edit, audio) to the app, and the next pod restores it.
 
+## Spectora integration
+
+Inspectors who schedule and publish in [Spectora](https://www.spectora.com) can connect it under
+**Integrations** (the plug icon). Spectora's public API uses company-scoped API keys, so each
+account pastes its own key; it is verified against Spectora and stored encrypted.
+
+```
+ Spectora ──webhook──► /api/integrations/spectora/webhook/<token> ──► re-read inspection via API
+                                                                       └─► new project, pre-filled
+ video finishes ──► poster frame attached to the Spectora inspection, named after /w/<share token>
+```
+
+- **Inspections in:** Spectora registers webhooks from its own dashboard (Integrations → Custom
+  integrations → Webhooks → *Add Endpoint*). The settings page shows the URL to paste and the
+  events to tick. Each delivery is treated as a hint only: the inspection is re-read with the
+  company's key before a project is created, so a forged POST cannot create anything.
+- **Videos out:** Spectora attachments accept images only (JPG, PNG, GIF; no PDF or video), so the
+  reel's poster frame is attached as an *Additional Document* whose filename and description carry
+  the public watch link. The watch page (`/w/<token>`) streams the reel and report to anyone with
+  the link, needs no account, and can be turned off per project.
+- **Field mapping:** Spectora does not publish the inspection schema. `lib/inspection/spectora/
+  client.ts` reads several plausible attribute names; the raw record is kept on each link and
+  shown by `GET /api/projects/<id>/spectora` so the mapping can be tuned against real data.
+- Set `SPECTORA_API_BASE` to point at a different host (default `https://connect.spectora.com`).
+
 ## Configuration (`.env`)
 
 | Variable | Default | Purpose |
@@ -91,6 +116,7 @@ scripts/install-autodeploy.sh        # optional: deploy every push to main autom
 | `APP_ORIGIN` | `http://localhost:3000` | Exact public origin (CSRF and cookies). HTTPS required beyond localhost. |
 | `BIND_ADDRESS` / `PORT` | `127.0.0.1` / `3000` | Where the app is published on the host. |
 | `ALLOW_REGISTRATION` | `false` | Allow accounts beyond the first. |
+| `APP_SECRET_KEY` | generated | 64 hex chars; encrypts stored third-party API keys. Kept at `$DATA_DIR/.secret-key` if unset. |
 
 To keep the key out of `.env`, put it in `secrets/openrouter_api_key` and run
 `docker compose -f compose.yaml -f compose.secrets.yaml up -d --build`.

@@ -73,6 +73,20 @@ export type ProjectDetail = {
   positives: { title: string; area: string }[];
   editorNotes: string;
   revisions: { message: string; at: string }[];
+  /** The Spectora inspection this project came from or was linked to. */
+  spectora?: SpectoraLink | null;
+  /** The public watch link, once one has been made. */
+  share?: { token: string; url: string; createdAt: string } | null;
+};
+
+export type SpectoraLink = {
+  inspectionId: string;
+  projectId: string;
+  status: "linked" | "canceled" | "deleted";
+  mapped: { property: Project["property"]; inspection: Project["inspection"]; people: string[]; client: string; agent: string; services: string[]; url: string };
+  pushedAt: string | null;
+  pushError: string | null;
+  attachmentId: string | null;
 };
 
 export type ProjectListItem = Pick<Project, "id" | "vertical" | "property" | "vehicle" | "inspection" | "updatedAt"> & {
