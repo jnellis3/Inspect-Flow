@@ -9,16 +9,25 @@ export { AppError, bucket, db } from "./server";
 
 const context = new AsyncLocalStorage<Account>();
 
-/** Run `fn` as an account outside a signed-in request (webhooks, background follow-ups). */
-export function asOwner<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
-  return context.run({ id: accountId, username: "", sessionHash: "" }, fn);
+/** Run `fn` for a workspace outside a signed-in request (webhooks, background follow-ups). It acts
+ *  as no particular person, with a member's permissions. */
+export function asWorkspace<T>(workspaceId: string, fn: () => Promise<T>): Promise<T> {
+  return context.run({ id: "", username: "", sessionHash: "", workspaceId, workspace: "", role: "member" }, fn);
 }
 
 /** The signed-in account for the current request. */
-export function owner() {
-  const account = context.getStore();
-  if (!account) throw new AppError(401, "Sign in to your account.");
-  return account.id;
+export function account() {
+  const current = context.getStore();
+  if (!current) throw new AppError(401, "Sign in to your account.");
+  return current;
+}
+
+/** The workspace every query in this request is scoped to. */
+export const workspaceId = () => account().workspaceId;
+
+/** Workspace settings and the team are the owner's to change. */
+export function requireOwner() {
+  if (account().role !== "owner") throw new AppError(403, "Only the workspace owner can change this.");
 }
 
 /** State-changing requests must come from this app's own pages. */
@@ -78,25 +87,29 @@ export async function api(request: Request, fn: () => Promise<Response>, options
 
 // ---------- projects ----------
 
-/** Projects saved before vehicles existed are home inspections. */
-function fromRow(r: { data: string; revision: number; updated_at: string }): Project {
-  const p = JSON.parse(r.data);
-  return { ...p, vertical: p.vertical ?? "home", vehicle: { ...EMPTY_VEHICLE, ...p.vehicle }, revision: r.revision, updatedAt: r.updated_at };
+/** Projects saved before vehicles existed are home inspections; before workspaces, each project
+ *  carried its own company details, which now belong to the workspace (all but the inspectors). */
+export function projectFromRow(r: { data: string; revision: number; updated_at: string }): Project {
+  const { company, ...p } = JSON.parse(r.data);
+  return {
+    ...p, vertical: p.vertical ?? "home", vehicle: { ...EMPTY_VEHICLE, ...p.vehicle }, inspectors: p.inspectors ?? company?.people ?? [],
+    revision: r.revision, updatedAt: r.updated_at,
+  };
 }
 
 export async function getProject(id: string): Promise<Project> {
-  const row = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE id = ? AND owner = ?")
-    .bind(id, owner()).first<{ data: string; revision: number; updated_at: string }>();
+  const row = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE id = ? AND workspace_id = ?")
+    .bind(id, workspaceId()).first<{ data: string; revision: number; updated_at: string }>();
   if (!row) throw new AppError(404, "Project not found.");
-  return fromRow(row);
+  return projectFromRow(row);
 }
 
 /** Optimistic write: fails with 409 if someone saved since `expected` was read. */
 export async function saveProject(p: Project, expected: number): Promise<Project> {
   const now = new Date().toISOString();
   const next = { ...p, revision: expected + 1, updatedAt: now };
-  const result = await db().prepare("UPDATE projects SET data = ?, address = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND owner = ? AND revision = ?")
-    .bind(JSON.stringify(next), projectTitle(p), now, p.id, owner(), expected).run();
+  const result = await db().prepare("UPDATE projects SET data = ?, address = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND workspace_id = ? AND revision = ?")
+    .bind(JSON.stringify(next), projectTitle(p), now, p.id, workspaceId(), expected).run();
   if (result.meta.changes !== 1) throw new AppError(409, "This project changed in another window. Refresh and try again.");
   return next;
 }
@@ -112,16 +125,16 @@ export async function updateProject(id: string, change: (p: Project) => Project)
 }
 
 export async function insertProject(p: Project) {
-  await db().prepare("INSERT INTO projects (id, owner, address, revision, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(p.id, owner(), projectTitle(p), p.revision, JSON.stringify(p), p.createdAt, p.updatedAt).run();
+  await db().prepare("INSERT INTO projects (id, workspace_id, address, revision, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(p.id, workspaceId(), projectTitle(p), p.revision, JSON.stringify(p), p.createdAt, p.updatedAt).run();
 }
 
 export async function listProjects(): Promise<Project[]> {
-  const rows = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE owner = ? ORDER BY updated_at DESC LIMIT 200")
-    .bind(owner()).all<{ data: string; revision: number; updated_at: string }>();
-  return rows.results.map(fromRow);
+  const rows = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200")
+    .bind(workspaceId()).all<{ data: string; revision: number; updated_at: string }>();
+  return rows.results.map(projectFromRow);
 }
 
 export async function deleteProject(id: string) {
-  await db().prepare("DELETE FROM projects WHERE id = ? AND owner = ?").bind(id, owner()).run();
+  await db().prepare("DELETE FROM projects WHERE id = ? AND workspace_id = ?").bind(id, workspaceId()).run();
 }

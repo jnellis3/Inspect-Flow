@@ -81,7 +81,7 @@ export default function ProjectView({ id }: { id: string }) {
           await request(`/api/projects/${project.id}/run`, { method: "POST", body: run.kind === "revise" ? { action: "revise", message: data.revisions.at(-1)?.message ?? "Please finish the previous change request." } : { action: "produce" } });
           await load();
         }} />}
-        {outputs.reel ? <Results data={data} reload={load} /> : !active && <Prepare project={project} run={run} onChange={load} />}
+        {outputs.reel ? <Results data={data} reload={load} /> : !active && <Prepare project={project} run={run} usage={data.usage} onChange={load} />}
         {!outputs.reel && !active && data.spectora && <SpectoraCard data={data} reload={load} />}
       </div>
     </div>
@@ -103,10 +103,12 @@ function DeleteButton({ id, disabled }: { id: string; disabled: boolean }) {
 
 // ---------- before the first run: uploads ----------
 
-function Prepare({ project, run, onChange }: { project: Project; run: RunStatus; onChange: () => Promise<unknown> }) {
+function Prepare({ project, run, usage, onChange }: { project: Project; run: RunStatus; usage: ProjectDetail["usage"]; onChange: () => Promise<unknown> }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const ready = project.video?.status === "ready" && project.supporting.every(f => f.status === "ready");
+  // A project that already started once (cancelled or failed) doesn't use another free video.
+  const left = usage.limit === null || usage.counted ? null : Math.max(0, usage.limit - usage.used);
   return (
     <>
       <section className="rounded-2xl border bg-card p-6 sm:p-8">
@@ -125,9 +127,12 @@ function Prepare({ project, run, onChange }: { project: Project; run: RunStatus;
           <p className="mt-1 text-sm text-white/70">
             {project.voice.mode === "ai" ? "AI narrator" : "Your own voice"} · about 2–3 minutes · plus a PDF report. Usually ready in 30–60 minutes.
           </p>
+          {left !== null && <p className="mt-1 text-sm text-white/70">{left
+            ? `Uses 1 of your workspace's ${usage.limit} free videos (${left} left).`
+            : `Your workspace has used its ${usage.limit} free videos.`}</p>}
           {error && <p className="mt-2 text-sm text-highlight">{error}</p>}
         </div>
-        <Button size="lg" disabled={!ready || busy} className="h-12 rounded-xl bg-highlight px-6 text-base text-foreground hover:bg-highlight/90" onClick={async () => {
+        <Button size="lg" disabled={!ready || busy || left === 0} className="h-12 rounded-xl bg-highlight px-6 text-base text-foreground hover:bg-highlight/90" onClick={async () => {
           setBusy(true); setError("");
           try { await request(`/api/projects/${project.id}/run`, { method: "POST", body: { action: "produce" } }); await onChange(); }
           catch (e) { setError((e as Error).message); }

@@ -4,7 +4,7 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Project, ProjectListItem } from "@/lib/inspection/types";
 import { ProjectFields } from "@/lib/inspection/fields";
-
+import { videoUsage } from "@/lib/inspection/workspaces";
 
 export const GET = (req: Request) => api(req, async () => {
   const projects = await listProjects();
@@ -14,7 +14,10 @@ export const GET = (req: Request) => api(req, async () => {
     hasVideo: p.video?.status === "ready",
     poster: !!(await stat(join(jobDir(p.id), OUTPUTS.poster.file)).catch(() => null)),
   })));
-  return Response.json({ projects: items, defaults: projects[0] ? { vertical: projects[0].vertical, company: projects[0].company, voice: projects[0].voice } : null });
+  // New projects start from the kind of inspection, inspectors and voice used last time in this workspace.
+  const defaults = projects[0] ? { vertical: projects[0].vertical, inspectors: projects[0].inspectors, voice: projects[0].voice } : null;
+  const { used, limit } = await videoUsage();
+  return Response.json({ projects: items, defaults, usage: { used, limit } });
 });
 
 export const POST = (req: Request) => api(req, async () => {

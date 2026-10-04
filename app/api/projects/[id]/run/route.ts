@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { api, body, getProject } from "@/lib/inspection/store";
 import { cancelRun, detail, queueRun } from "@/lib/inspection/jobs";
+import { videoUsage } from "@/lib/inspection/workspaces";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -14,5 +15,5 @@ export const POST = (req: Request, c: Context) => api(req, async () => {
   const project = await getProject((await c.params).id);
   if (input.action === "cancel") await cancelRun(project.id);
   else await queueRun(project, input.action, input.action === "revise" ? input.message : "");
-  return Response.json({ project, ...(await detail(project)) });
+  return Response.json({ project, ...(await detail(project)), usage: await videoUsage(project.id) });
 });

@@ -1,9 +1,14 @@
 import { z } from "zod";
-import { api, body } from "@/lib/inspection/store";
+import { account, api, body } from "@/lib/inspection/store";
 import { connect, disconnect, getConnection, updateConnection, view } from "@/lib/inspection/spectora/store";
 
-/** Connection status for the settings page (never the key). */
-export const GET = (req: Request) => api(req, async () => Response.json({ spectora: view(await getConnection()) }));
+/** Connection status for the settings page (never the key). The webhook URL is a secret, so only
+ *  the workspace owner, who manages the connection, sees the details. */
+export const GET = (req: Request) => api(req, async () => {
+  const connection = await getConnection();
+  const canManage = account().role === "owner";
+  return Response.json({ spectora: canManage ? view(connection) : { connected: !!connection }, canManage });
+});
 
 /** Connect (or replace the key). Verifies the key against Spectora before saving it sealed. */
 export const POST = (req: Request) => api(req, async () => {

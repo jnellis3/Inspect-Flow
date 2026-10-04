@@ -16,16 +16,18 @@ export const ProjectFields = z.object({
     location: text(120),
   }).default({}),
   inspection: z.object({ date: text(40), type: z.string().trim().max(60).default("New construction") }),
-  company: z.object({
-    name: text(120),
-    people: z.array(z.string().trim().max(60)).max(8).default([]),
-    phone: text(40),
-    website: text(120),
-    accent: z.string().trim().regex(/^(#[0-9a-fA-F]{6})?$/, "Use a hex color like #FFD23F.").default(""),
-  }),
+  inspectors: z.array(z.string().trim().max(60)).max(8).default([]),
   voice: z.object({ mode: z.enum(["ai", "source"]), voice: z.string().trim().max(20).default("ash") }),
   notes: z.string().max(10_000).default(""),
 }).superRefine((f, ctx) => {
   if (f.vertical === "home" && !f.property.address) ctx.addIssue({ code: "custom", path: ["property", "address"], message: "Add the property address." });
   if (f.vertical === "vehicle" && !(f.vehicle.make && f.vehicle.model)) ctx.addIssue({ code: "custom", path: ["vehicle", "model"], message: "Add the vehicle's make and model." });
+});
+
+/** The workspace's company profile (settings page). */
+export const CompanyFields = z.object({
+  name: z.string().trim().min(1, "Add your company's name.").max(120),
+  phone: text(40),
+  website: text(120),
+  accent: z.string().trim().regex(/^(#[0-9a-fA-F]{6})?$/, "Use a hex color like #FFD23F.").default(""),
 });

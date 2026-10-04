@@ -1,6 +1,6 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -28,7 +28,7 @@ test("SQLite persists across restart, applies migrations once, and rolls back a 
   database = new LocalDatabase(directory, migrations);
   t.after(() => database.close());
   assert.equal((await database.prepare("SELECT username FROM app_users").all<{username: string}>()).results[0].username, "storage-test");
-  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM _inspect_flow_migrations").first<{count: number}>())?.count, 3);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM _inspect_flow_migrations").first<{count: number}>())?.count, (await readdir(migrations)).filter(name => name.endsWith(".sql")).length);
 });
 
 test("migration changes fail safely and partially failing new migrations roll back", async t => {

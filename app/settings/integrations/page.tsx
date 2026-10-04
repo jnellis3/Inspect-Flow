@@ -20,8 +20,9 @@ export default function IntegrationsPage() {
 
 function Integrations() {
   const [view, setView] = useState<View | null>(null);
+  const [canManage, setCanManage] = useState(false);
   const [error, setError] = useState("");
-  const load = useCallback(() => request<{ spectora: View }>("/api/integrations/spectora").then(d => setView(d.spectora)).catch(e => setError(e.message)), []);
+  const load = useCallback(() => request<{ spectora: View; canManage: boolean }>("/api/integrations/spectora").then(d => { setView(d.spectora); setCanManage(d.canManage); }).catch(e => setError(e.message)), []);
   useEffect(() => { void load(); }, [load]);
 
   return (
@@ -30,18 +31,30 @@ function Integrations() {
       <p className="mt-1 mb-8 text-sm text-muted-foreground">Connect the software you already schedule and publish in. New inspections become projects here, and finished videos go back.</p>
       {error && <p className="mb-6 rounded-xl bg-orange-50 p-4 text-sm text-orange-900">{error}</p>}
       {!view ? <div className="grid h-40 place-items-center text-muted-foreground"><LoaderCircle className="animate-spin" /></div>
+        : !canManage ? <MemberView connected={view.connected} />
         : view.connected ? <Connected view={view} reload={load} /> : <Connect onConnected={load} />}
     </div>
   );
 }
 
-function Card({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function Card({ title, description, children }: { title: string; description?: string; children?: React.ReactNode }) {
   return (
     <section className="rounded-2xl border bg-card p-6 sm:p-8">
       <h2 className="text-lg font-semibold">{title}</h2>
       {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
-      <div className="mt-5">{children}</div>
+      {children && <div className="mt-5">{children}</div>}
     </section>
+  );
+}
+
+/** Teammates use the connection; the workspace owner manages it. */
+function MemberView({ connected }: { connected: boolean }) {
+  if (!connected) return <Card title="Spectora" description="Not connected yet. Ask your workspace owner to connect it here." />;
+  return (
+    <div className="grid gap-6">
+      <Card title="Spectora is connected" description="New inspections become projects here, and finished videos go back. Your workspace owner manages the connection." />
+      <RecentInspections />
+    </div>
   );
 }
 
@@ -112,7 +125,7 @@ function Connected({ view, reload }: { view: Extract<View, { connected: true }>;
           <li className="flex gap-3"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">2</span>
             <span className="min-w-0 flex-1">Paste this URL as the endpoint:
               <span className="mt-1.5 flex flex-wrap items-center gap-2"><code className="min-w-0 flex-1 truncate rounded-md bg-muted px-2.5 py-1.5 font-mono text-xs">{view.webhookUrl}</code><CopyButton value={view.webhookUrl} /></span>
-              <span className="mt-1 block text-xs text-muted-foreground">The long token is this account&rsquo;s secret. Treat the URL like a password.</span>
+              <span className="mt-1 block text-xs text-muted-foreground">The long token is your workspace&rsquo;s secret. Treat the URL like a password.</span>
             </span></li>
           <li className="flex gap-3"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">3</span><span>Select these events: {EVENTS.map(e => <code key={e} className="mx-0.5 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{e}</code>)}</span></li>
         </ol>

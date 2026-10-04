@@ -15,7 +15,7 @@ test('self-hosted authentication and origin boundaries',async suite => {
   };
   process.env.DATA_DIR = directory;
   process.env.APP_ORIGIN = 'http://localhost:3000';
-  delete process.env.ALLOW_REGISTRATION;
+  process.env.ALLOW_REGISTRATION = 'false';
 
   let database:ReturnType<typeof import('../lib/inspection/server').db>|undefined;
   try {
@@ -69,11 +69,11 @@ test('self-hosted authentication and origin boundaries',async suite => {
       assert(!local.includes('; Secure;'));
     });
 
-    await suite.test('allows exactly one concurrent first signup and closes registration',async () => {
+    await suite.test('with registration closed, allows exactly one concurrent first signup',async () => {
       assert.equal(await auth.registrationOpen(),true);
       const results = await Promise.allSettled([
-        auth.createAccount('fixture_alpha',fixturePassphrase),
-        auth.createAccount('fixture_beta',fixturePassphrase)
+        auth.createAccount('fixture_alpha',fixturePassphrase,'Fixture Alpha Inspections'),
+        auth.createAccount('fixture_beta',fixturePassphrase,'Fixture Beta Inspections')
       ]);
       const accepted = results.filter((result):result is PromiseFulfilledResult<{id:string;username:string}> => result.status === 'fulfilled');
       const rejected = results.filter((result):result is PromiseRejectedResult => result.status === 'rejected');
@@ -82,8 +82,11 @@ test('self-hosted authentication and origin boundaries',async suite => {
       assert.equal(rejected[0].reason.status,403);
       firstAccount = accepted[0].value;
       assert.equal((await db().prepare('SELECT count(*) AS total FROM app_users').first<{total:number}>())?.total,1);
+      // The losing signup left no orphaned workspace behind.
+      assert.equal((await db().prepare('SELECT count(*) AS total FROM workspaces').first<{total:number}>())?.total,1);
+      assert.deepEqual({...await auth.accountSummary(firstAccount.id)},{id:firstAccount.id,username:firstAccount.username,role:'owner',workspace:accepted[0].value.username === 'fixture_alpha' ? 'Fixture Alpha Inspections' : 'Fixture Beta Inspections'});
       assert.equal(await auth.registrationOpen(),false);
-      await assert.rejects(auth.createAccount('fixture_extra',fixturePassphrase),{status:403});
+      await assert.rejects(auth.createAccount('fixture_extra',fixturePassphrase,'Fixture Extra'),{status:403});
     });
 
     await suite.test('preserves scrypt authentication and rejects invalid credentials',async () => {
@@ -116,15 +119,17 @@ test('self-hosted authentication and origin boundaries',async suite => {
       assert.equal(await auth.authenticate(authenticatedRequest('invalid-token')),null);
     });
 
-    await suite.test('requires explicit opt-in for additional accounts',async () => {
-      process.env.ALLOW_REGISTRATION = 'false';
+    await suite.test('anyone can create a new workspace unless ALLOW_REGISTRATION=false',async () => {
       assert.equal(await auth.registrationOpen(),false);
-      process.env.ALLOW_REGISTRATION = 'true';
-      assert.equal(await auth.registrationOpen(),true);
-      await auth.createAccount('fixture_additional',fixturePassphrase);
-      await assert.rejects(auth.createAccount('fixture_additional',fixturePassphrase),{status:409});
-      assert.equal((await db().prepare('SELECT count(*) AS total FROM app_users').first<{total:number}>())?.total,2);
       delete process.env.ALLOW_REGISTRATION;
+      assert.equal(await auth.registrationOpen(),true);
+      const additional = await auth.createAccount('fixture_additional',fixturePassphrase,'Fixture Additional');
+      await assert.rejects(auth.createAccount('fixture_additional',fixturePassphrase,'Fixture Duplicate'),{status:409});
+      assert.equal((await db().prepare('SELECT count(*) AS total FROM app_users').first<{total:number}>())?.total,2);
+      assert.equal((await db().prepare('SELECT count(*) AS total FROM workspaces').first<{total:number}>())?.total,2);
+      assert.notEqual((await auth.authenticate(authenticatedRequest(await auth.newSession(localRequest(),additional.id))))?.workspaceId,
+        (await auth.authenticate(authenticatedRequest(await auth.newSession(localRequest(),firstAccount.id))))?.workspaceId);
+      process.env.ALLOW_REGISTRATION = 'false';
       assert.equal(await auth.registrationOpen(),false);
     });
 

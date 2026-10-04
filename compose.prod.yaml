@@ -13,7 +13,8 @@ services:
       - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
     environment:
       APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN to the public https:// origin}
-      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      TRIAL_VIDEO_LIMIT: ${TRIAL_VIDEO_LIMIT:-3}
       DATA_DIR: /data
       JOBS_DIR: /data/jobs
       WORKER_MODE: runpod

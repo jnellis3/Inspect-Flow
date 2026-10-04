@@ -4,7 +4,7 @@ import { connectionForToken, handleWebhook } from "@/lib/inspection/spectora/sto
 type Context = { params: Promise<{ token: string }> };
 
 /**
- * Spectora posts here when an inspection changes. The URL carries a per-account secret, and the
+ * Spectora posts here when an inspection changes. The URL carries a per-workspace secret, and the
  * inspection itself is re-read through the API before any project is created, so the delivery's
  * body is never trusted on its own. Spectora does not document a signature header; if one appears
  * in your dashboard, verify it here as well.

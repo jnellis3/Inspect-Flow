@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { Bot, Car, House, LoaderCircle, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,14 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EMPTY_VEHICLE, INSPECTION_TYPES, VOICES, type Project, type Vertical } from "@/lib/inspection/types";
 
-export type Fields = Pick<Project, "vertical" | "property" | "vehicle" | "inspection" | "company" | "voice" | "notes">;
+export type Fields = Pick<Project, "vertical" | "property" | "vehicle" | "inspection" | "inspectors" | "voice" | "notes">;
 
 export const EMPTY: Fields = {
   vertical: "home",
   property: { address: "", city: "", kind: "" },
   vehicle: EMPTY_VEHICLE,
   inspection: { date: new Date().toISOString().slice(0, 10), type: INSPECTION_TYPES.home[0] },
-  company: { name: "", people: [], phone: "", website: "", accent: "" },
+  inspectors: [],
   voice: { mode: "ai", voice: "ash" },
   notes: "",
 };
@@ -42,11 +43,11 @@ function Section({ title, description, children }: { title: string; description?
 
 const COPY = {
   home: {
-    company: "Lone Star Home Inspections", people: "Tyler, Chris",
+    people: "Tyler, Chris",
     notes: "e.g. First-time buyers, keep it reassuring. The window seal issue is the one they asked about.",
   },
   vehicle: {
-    company: "Redline Motorwerks", people: "Marco",
+    people: "Marco",
     notes: "e.g. The buyer is out of state and asked about the service history. Compression and scan results are in the attached PDF. My estimate for the water pump job is $1,100–1,400.",
   },
 } as const;
@@ -59,7 +60,7 @@ export function withVertical(f: Fields, vertical: Vertical): Fields {
 
 export default function ProjectForm({ initial, submitLabel, onSubmit, chooseVertical = false }: { initial: Fields; submitLabel: string; onSubmit: (f: Fields) => Promise<void>; chooseVertical?: boolean }) {
   const [f, setF] = useState<Fields>(initial);
-  const [people, setPeople] = useState(initial.company.people.join(", "));
+  const [people, setPeople] = useState(initial.inspectors.join(", "));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const set = <K extends keyof Fields>(key: K, value: Partial<Fields[K]>) => setF(prev => ({ ...prev, [key]: typeof value === "object" ? { ...(prev[key] as object), ...value } : value }));
@@ -69,7 +70,7 @@ export default function ProjectForm({ initial, submitLabel, onSubmit, chooseVert
     setBusy(true);
     setError("");
     try {
-      await onSubmit({ ...f, company: { ...f.company, people: people.split(",").map(s => s.trim()).filter(Boolean) } });
+      await onSubmit({ ...f, inspectors: people.split(",").map(s => s.trim()).filter(Boolean) });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -131,22 +132,8 @@ export default function ProjectForm({ initial, submitLabel, onSubmit, chooseVert
           </Field>
           <Field label="Date"><Input className={input} type="date" value={f.inspection.date} onChange={e => set("inspection", { date: e.target.value })} /></Field>
         </div>
-      </Section>
-
-      <Section title="Your company" description="Used in the video's opening, closing and report. Remembered for your next project.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Company name"><Input className={input} value={f.company.name} onChange={e => set("company", { name: e.target.value })} placeholder={copy.company} /></Field>
-          <Field label="Inspectors" hint="Comma-separated"><Input className={input} value={people} onChange={e => setPeople(e.target.value)} placeholder={copy.people} /></Field>
-          <Field label="Phone"><Input className={input} value={f.company.phone} onChange={e => set("company", { phone: e.target.value })} placeholder="(281) 555-0100" /></Field>
-          <Field label="Website"><Input className={input} value={f.company.website} onChange={e => set("company", { website: e.target.value })} placeholder="example.com" /></Field>
-        </div>
-        <Field label="Brand color" hint="Used for callouts and highlights in the video. Leave empty for the default yellow.">
-          <div className="flex items-center gap-3">
-            <input type="color" aria-label="Pick brand color" className="h-10 w-14 cursor-pointer rounded-md border bg-white p-1" value={f.company.accent || "#ffd23f"} onChange={e => set("company", { accent: e.target.value })} />
-            <Input className={`${input} max-w-36 font-mono`} value={f.company.accent} onChange={e => set("company", { accent: e.target.value })} placeholder="#FFD23F" />
-            {f.company.accent && <button type="button" className="text-sm text-muted-foreground underline-offset-4 hover:underline" onClick={() => set("company", { accent: "" })}>Use default</button>}
-          </div>
-        </Field>
+        <Field label="Inspectors" hint="Comma-separated. Named in the video and on the report."><Input className={input} value={people} onChange={e => setPeople(e.target.value)} placeholder={copy.people} /></Field>
+        <p className="text-sm text-muted-foreground">Your company name, phone, website and brand color come from your <Link href="/settings" className="font-medium text-foreground underline underline-offset-4">workspace settings</Link>.</p>
       </Section>
 
       <Section title="Narration" description="Who does the talking in the video.">

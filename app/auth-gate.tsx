@@ -6,7 +6,7 @@ import {Button} from "@/components/ui/button";
 import {cn} from "@/lib/utils";
 import {Input} from "@/components/ui/input";
 
-type Account = {id:string;username:string};
+export type Account = {id:string;username:string;workspace:string;role:'owner'|'member'};
 type AuthResponse = {account?:Account|null;registrationOpen:boolean;error?:string};
 
 async function call(method:string,body?:unknown):Promise<AuthResponse> {
@@ -26,6 +26,7 @@ export default function AuthGate({children}:{children:(account:Account,logout:()
   const [loading,setLoading] = useState(true);
   const [registrationOpen,setRegistrationOpen] = useState(false);
   const [mode,setMode] = useState<'login'|'signup'>('login');
+  const [company,setCompany] = useState('');
   const [username,setUsername] = useState('');
   const [password,setPassword] = useState('');
   const [error,setError] = useState('');
@@ -45,7 +46,7 @@ export default function AuthGate({children}:{children:(account:Account,logout:()
     setBusy(true);
     setError('');
     try {
-      const data = await call('POST',{action:mode,username,password});
+      const data = await call('POST',mode === 'signup' ? {action:mode,company,username,password} : {action:mode,username,password});
       setPassword('');
       applyAuth(data);
       dispatchEvent(new Event('inspection-auth-change'));
@@ -98,11 +99,13 @@ export default function AuthGate({children}:{children:(account:Account,logout:()
       void call('GET').then(applyAuth).catch(() => {});
     };
     addEventListener('pageshow',sync);
+    addEventListener('inspection-workspace-change',sync);
     document.addEventListener('visibilitychange',sync);
     return () => {
       broadcast?.close();
       removeEventListener('inspection-auth-change',notifyPeers);
       removeEventListener('pageshow',sync);
+      removeEventListener('inspection-workspace-change',sync);
       document.removeEventListener('visibilitychange',sync);
     };
   },[applyAuth]);
@@ -112,9 +115,12 @@ export default function AuthGate({children}:{children:(account:Account,logout:()
   return <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-12">
     <Link href="/" className="mb-10 flex items-center justify-center gap-3"><Logo /><span className="font-display text-2xl font-bold tracking-tight">Inspect Flow</span></Link>
     <section className="rounded-2xl border bg-card p-7 shadow-[0_20px_60px_-30px_rgb(11_18_32/0.35)]">
-      <h1 className="font-display text-3xl font-bold">{mode === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
+      <h1 className="font-display text-3xl font-bold">{mode === 'signup' ? 'Create your workspace' : 'Welcome back'}</h1>
       <p className="mt-1.5 text-sm text-muted-foreground">{mode === 'signup' ? 'Turn walkthroughs into videos and reports your clients will actually watch.' : 'Sign in to your inspection workspace.'}</p>
       <form onSubmit={submit} className="mt-7 flex flex-col gap-5">
+        {mode === 'signup' && <label className="flex flex-col gap-1.5 text-sm font-medium">Company name
+          <Input value={company} onChange={event => setCompany(event.target.value)} autoComplete="organization" maxLength={120} required className="h-11 bg-white" />
+          <small className="font-normal text-muted-foreground">Shown in your videos and reports. Your teammates can join later with an invite link.</small></label>}
         <label className="flex flex-col gap-1.5 text-sm font-medium">Username
           <Input value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} minLength={3} maxLength={40} required className="h-11 bg-white" /></label>
         <label className="flex flex-col gap-1.5 text-sm font-medium">Passphrase
@@ -125,7 +131,7 @@ export default function AuthGate({children}:{children:(account:Account,logout:()
       </form>
       {registrationOpen && <p className="mt-6 text-center text-sm text-muted-foreground">{mode === 'signup' ? 'Already have an account?' : 'New here?'} <button className="font-semibold text-foreground underline-offset-4 hover:underline" disabled={busy} onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setError(''); setPassword(''); }}>{mode === 'signup' ? 'Sign in' : 'Create an account'}</button></p>}
     </section>
-    <p className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-3.5" />Your projects are private to your account.</p>
+    <p className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-3.5" />Your projects are private to your workspace.</p>
   </main>;
 }
 

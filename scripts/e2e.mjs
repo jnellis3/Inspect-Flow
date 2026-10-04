@@ -51,12 +51,12 @@ async function upload(projectId, target, path) {
 }
 
 const username = `e2e-${randomBytes(3).toString("hex")}`;
-await call("/api/auth", { method: "POST", body: { action: "signup", username, password: randomBytes(18).toString("hex") } });
+await call("/api/auth", { method: "POST", body: { action: "signup", username, company: "E2E Inspections", password: randomBytes(18).toString("hex") } });
 console.log("signed up as", username);
 const { project } = await call("/api/projects", { method: "POST", body: {
   property: { address: "E2E Test House", city: "Cypress, TX", kind: "" },
   inspection: { date: "2026-10-03", type: "New construction" },
-  company: { name: "E2E Inspections", people: ["Tyler"], phone: "", website: "", accent: "" },
+  inspectors: ["Tyler"],
   voice: { mode: process.env.E2E_VOICE || "ai", voice: "ash" }, notes: "Automated end-to-end test. Keep the reel short.",
 } });
 await upload(project.id, "video", video);

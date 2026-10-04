@@ -11,22 +11,22 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ token: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const project = await projectForShare((await params).token).catch(() => null);
-  if (!project) return { title: "Inspect Flow" };
-  const title = `${projectTitle(project)} · Inspection highlights`;
-  return { title, description: `A ${project.company.name || "home inspection"} highlight video.`, openGraph: { title, images: [`/api/w/${(await params).token}/poster`], type: "video.other" }, robots: { index: false, follow: false } };
+  const shared = await projectForShare((await params).token).catch(() => null);
+  if (!shared) return { title: "Inspect Flow" };
+  const title = `${projectTitle(shared.project)} · Inspection highlights`;
+  return { title, description: `A ${shared.company.name || "home inspection"} highlight video.`, openGraph: { title, images: [`/api/w/${(await params).token}/poster`], type: "video.other" }, robots: { index: false, follow: false } };
 }
 
 const PRIORITY: Record<string, string> = { safety: "Safety", repair: "Repair", minor: "Minor fix", monitor: "Monitor" };
 
 export default async function WatchPage({ params }: Props) {
   const { token } = await params;
-  const project = await projectForShare(token).catch(() => null);
-  if (!project) notFound();
+  const shared = await projectForShare(token).catch(() => null);
+  if (!shared) notFound();
+  const { project, company } = shared;
   const info = await detail(project);
   if (!info.outputs.reel) notFound();
   const base = `/api/w/${token}`;
-  const company = project.company;
   const details = [project.inspection.type, project.inspection.date, ...projectDetails(project)].filter(Boolean).join(" · ");
 
   return (

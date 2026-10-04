@@ -142,6 +142,18 @@ function runJob(dir, sink) {
 
 // ---------- local mode: the app and worker share a volume ----------
 
+/** Oldest first, but workspaces take turns so one company's batch can't hold up everyone else's
+ *  (mirrors nextQueued in lib/inspection/worker-api.ts). */
+function nextQueued(jobs) {
+  const turns = new Map();
+  const whose = j => j.status.workspace ?? j.dir;
+  for (const j of jobs) if (j.status?.state === "running") turns.set(whose(j), (turns.get(whose(j)) ?? 0) + 1);
+  return jobs.filter(j => j.status?.state === "queued")
+    .sort((a, b) => String(a.status.queuedAt).localeCompare(String(b.status.queuedAt)))
+    .map(job => { const turn = turns.get(whose(job)) ?? 0; turns.set(whose(job), turn + 1); return { job, turn }; })
+    .sort((a, b) => a.turn - b.turn)[0]?.job;
+}
+
 async function localMode() {
   // The app shows "video engine offline" when this file goes stale.
   const heartbeat = () => { try { writeFileSync(join(JOBS, ".worker-heartbeat"), new Date().toISOString()); } catch { /* volume not ready */ } };
@@ -157,12 +169,9 @@ async function localMode() {
   log("worker ready (local), watching", JOBS);
   for (;;) {
     heartbeat();
-    const queued = jobDirs()
-      .map(dir => ({ dir, status: readJson(join(dir, "status.json")) }))
-      .filter(j => j.status?.state === "queued")
-      .sort((a, b) => String(a.status.queuedAt).localeCompare(String(b.status.queuedAt)));
-    if (!queued.length) { await sleep(POLL_MS); continue; }
-    const dir = queued[0].dir;
+    const next = nextQueued(jobDirs().map(dir => ({ dir, status: readJson(join(dir, "status.json")) })));
+    if (!next) { await sleep(POLL_MS); continue; }
+    const dir = next.dir;
     const statusPath = join(dir, "status.json");
     rmSync(join(dir, "cancel"), { force: true });
     const final = await runJob(dir, {
