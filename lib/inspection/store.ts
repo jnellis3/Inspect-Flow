@@ -9,6 +9,11 @@ export { AppError, bucket, db } from "./server";
 
 const context = new AsyncLocalStorage<Account>();
 
+/** Run `fn` as an account outside a signed-in request (webhooks, background follow-ups). */
+export function asOwner<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
+  return context.run({ id: accountId, username: "", sessionHash: "" }, fn);
+}
+
 /** The signed-in account for the current request. */
 export function owner() {
   const account = context.getStore();

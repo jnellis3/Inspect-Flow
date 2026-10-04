@@ -12,6 +12,7 @@ import ProjectForm from "./project-form";
 import { StateBadge } from "./state-badge";
 import { uploadFile } from "./uploader";
 import { Markdown } from "./markdown";
+import SpectoraCard from "./spectora-card";
 import { POSITIVES_LABEL, projectDetails, projectTitle, type FindingSummary, type Project, type ProjectDetail, type RunStatus } from "@/lib/inspection/types";
 
 const PRIORITY: Record<FindingSummary["priority"], { label: string; dot: string }> = {
@@ -81,6 +82,7 @@ export default function ProjectView({ id }: { id: string }) {
           await load();
         }} />}
         {outputs.reel ? <Results data={data} reload={load} /> : !active && <Prepare project={project} run={run} onChange={load} />}
+        {!outputs.reel && !active && data.spectora && <SpectoraCard data={data} reload={load} />}
       </div>
     </div>
   );
@@ -353,6 +355,7 @@ function Results({ data, reload }: { data: ProjectDetail; reload: () => Promise<
         </section>
         <aside className="grid content-start gap-6">
           <Revise projectId={project.id} disabled={busy} history={data.revisions} onSent={reload} />
+          <SpectoraCard data={data} reload={reload} />
           {data.editorNotes && (
             <details className="rounded-xl border bg-card p-4">
               <summary className="cursor-pointer text-sm font-semibold">Notes from the AI editor</summary>

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { LogOut, Plus } from "lucide-react";
+import { LogOut, Plug, Plus } from "lucide-react";
 import AuthGate, { Logo } from "../auth-gate";
 import { Button } from "@/components/ui/button";
 
@@ -18,6 +18,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               </Link>
               <div className="flex items-center gap-2">
                 <Button asChild size="sm" className="rounded-lg"><Link href="/new"><Plus />New project</Link></Button>
+                <Button asChild variant="ghost" size="icon-sm" aria-label="Integrations" title="Integrations"><Link href="/settings/integrations"><Plug /></Link></Button>
                 <span className="hidden px-2 text-sm text-muted-foreground sm:inline">{account.username}</span>
                 <Button variant="ghost" size="icon-sm" onClick={logout} aria-label="Sign out" title="Sign out"><LogOut /></Button>
               </div>

@@ -28,7 +28,7 @@ test("SQLite persists across restart, applies migrations once, and rolls back a 
   database = new LocalDatabase(directory, migrations);
   t.after(() => database.close());
   assert.equal((await database.prepare("SELECT username FROM app_users").all<{username: string}>()).results[0].username, "storage-test");
-  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM _inspect_flow_migrations").first<{count: number}>())?.count, 2);
+  assert.equal((await database.prepare("SELECT COUNT(*) AS count FROM _inspect_flow_migrations").first<{count: number}>())?.count, 3);
 });
 
 test("migration changes fail safely and partially failing new migrations roll back", async t => {
