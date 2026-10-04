@@ -8,7 +8,12 @@ const interDisplay = localFont({ src: "./fonts/InterDisplay-Bold.ttf", variable:
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#0b1220" };
 
+// Link previews need absolute image URLs. APP_ORIGIN is the public address; it is only known at
+// runtime, so pages with previews (the landing pages) render per request to pick it up.
+const origin = process.env.APP_ORIGIN?.trim();
+
 export const metadata: Metadata = {
+  metadataBase: origin && URL.canParse(origin) ? new URL(origin) : undefined,
   title: "Inspect Flow",
   description: "Turn a walkthrough video into a narrated highlight reel and report your clients will actually watch.",
   manifest: "/manifest.webmanifest",

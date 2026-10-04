@@ -6,6 +6,9 @@ import {
 } from "lucide-react";
 import { Cta, Faq, Features, Footer, Header, HowItWorks } from "../_components/marketing";
 
+// Rendered per request so the link-preview image uses the runtime APP_ORIGIN (see app/layout.tsx).
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Inspect Flow for specialist car shops · White-glove inspection reports on film",
   description: "For specialists in exotic, luxury and collector cars. Film your inspection or service visit the way you already do; Inspect Flow turns it into a polished, narrated film of the car, every finding shown and explained, with a matching report under your name.",
@@ -13,7 +16,10 @@ export const metadata: Metadata = {
     title: "White-glove work deserves a white-glove report.",
     description: "Turn your inspection footage into a polished, narrated film of your client's car, with a matching report under your name.",
     images: ["/marketing/explainer-vehicle-poster.jpg"],
+    type: "website",
+    siteName: "Inspect Flow",
   },
+  twitter: { card: "summary_large_image" },
 };
 
 // New projects started from this page are vehicle inspections.

@@ -3,6 +3,9 @@ import Link from "next/link";
 import { ArrowRight, Bot, Captions, Check, Clock, FileText, Lock, MessageSquare, Mic, Palette, ScanSearch, Upload, Video } from "lucide-react";
 import { Cta, Demo, Faq, Features, Footer, Header, Hero, HowItWorks, Mark, Problem } from "./_components/marketing";
 
+// Rendered per request so the link-preview image uses the runtime APP_ORIGIN (see app/layout.tsx).
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Inspect Flow · Inspection videos your clients actually watch",
   description: "Upload your raw walkthrough. Inspect Flow's AI editor finds every issue you pointed out, labels it on screen, narrates it in plain English, and hands you a 2–3 minute highlight video and a matching PDF report.",
@@ -10,7 +13,10 @@ export const metadata: Metadata = {
     title: "Inspect Flow · Inspection videos your clients actually watch",
     description: "Turn a raw inspection walkthrough into a narrated, labeled highlight video and a matching report.",
     images: ["/marketing/explainer-poster.jpg"],
+    type: "website",
+    siteName: "Inspect Flow",
   },
+  twitter: { card: "summary_large_image" },
 };
 
 const steps = [
