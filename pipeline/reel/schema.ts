@@ -83,16 +83,21 @@ export type Edit = z.infer<typeof Edit>;
 
 export const Priority = z.enum(["safety", "repair", "minor", "monitor"]);
 
+// Who acts on a finding. The profile says which of these apply to its domain.
+export const Who = z.enum(["builder", "homeowner", "specialist", "seller", "owner"]);
+export const WHO: Record<z.infer<typeof Who>, string> = { builder: "Builder", homeowner: "Homeowner", specialist: "Specialist", seller: "Seller", owner: "Owner" };
+
 export const Finding = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/),
-  area: z.string().max(24),              // Roof, Exterior, Grounds, Windows, Attic…
-  title: z.string().max(64),             // plain language, homeowner-readable
+  area: z.string().max(24),              // Roof, Exterior, Engine, Underside… (the profile lists them)
+  title: z.string().max(64),             // plain language, readable by the viewer
   priority: Priority,
-  who: z.enum(["builder", "homeowner", "specialist"]),
+  who: Who,
   summary: z.string().max(400),          // what we saw
   whyItMatters: z.string().max(400),
   recommendation: z.string().max(300),
   fix: z.string().max(60),               // the one-line action shown on screen
+  estimate: z.string().max(40).optional(), // a cost exactly as the inspector stated it ("$1,800–2,400"); never invented
   evidence: z.array(z.object({ in: seconds, out: seconds, quote: z.string().max(300).optional() })).min(1),
   photo: z.object({ src: SupportingSrc.optional(), at: seconds, crop: z.object({ x: frac, y: frac, w: frac, h: frac }).optional(), annotations: z.array(Annotation).default([]) }),
   confidence: z.enum(["confirmed", "likely", "possible"]),
@@ -113,9 +118,26 @@ export const Brief = z.object({
   audience: z.string().default("homeowner"),
   targetSeconds: z.tuple([z.number(), z.number()]).default([120, 180]),
   voice: z.object({ mode: z.enum(["ai", "source"]), voice: z.string().default("ash") }),
-  property: z.object({ address: z.string(), city: z.string().optional(), kind: z.string().optional() }),
+  // What the video and report are about, ready to display. Older briefs only have `property`.
+  subject: z.object({ title: z.string(), details: z.array(z.string()).default([]) }).optional(),
+  property: z.object({ address: z.string(), city: z.string().optional(), kind: z.string().optional() }).optional(),
+  vehicle: z.object({ year: z.string(), make: z.string(), model: z.string(), trim: z.string(), vin: z.string(), mileage: z.string(), location: z.string() }).partial().optional(),
   inspection: z.object({ date: z.string(), type: z.string() }),
   company: z.object({ name: z.string(), people: z.array(z.string()).default([]), phone: z.string().optional(), website: z.string().optional(), accent: z.string().optional() }),
   notes: z.string().default(""),
 });
 export type Brief = z.infer<typeof Brief>;
+
+/** The display title and detail line for a brief. */
+export function subjectOf(brief: Brief) {
+  if (brief.subject) return brief.subject;
+  const p = brief.property ?? { address: "Inspection" };
+  return { title: p.address, details: [p.city, p.kind].filter((x): x is string => !!x) };
+}
+
+/** Domain wording the renderers need (labels the agent doesn't write). */
+export function wording(brief: Brief) {
+  return brief.profile.startsWith("vehicle")
+    ? { positives: "Checks out", list: "Findings at a glance" }
+    : { positives: "Done right", list: "Punch list" };
+}

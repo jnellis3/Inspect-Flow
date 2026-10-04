@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, readdirSync, lstatSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Brief, Edit, Findings, Shot, type Annotation, type Finding, type Scene } from "./schema.ts";
+import { Brief, Edit, Findings, Shot, WHO, subjectOf, wording, type Annotation, type Finding, type Scene } from "./schema.ts";
 
 const W = 1920, H = 1080;
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -19,7 +19,6 @@ const PRIORITY: Record<string, { label: string; color: string }> = {
   minor: { label: "Minor fix", color: "#3B82F6" },
   monitor: { label: "Monitor", color: "#94A3B8" },
 };
-const WHO: Record<string, string> = { builder: "Builder", homeowner: "Homeowner", specialist: "Specialist" };
 const GOOD = "#22C55E";
 
 type Word = { w: string; start: number; end: number };
@@ -38,6 +37,7 @@ const music = optJson("reel/audio/music.json") as { file: string; duration: numb
 const transcript = optJson("analysis/transcript.json") as { segments: { words: { start: number; end: number; word: string }[] }[] } | null;
 const byId = new Map(findings.findings.map(f => [f.id, f]));
 const accent = brief.company.accent ?? "#FFD23F";
+const vocab = wording(brief);
 const warnings: string[] = [];
 const out = join(job, "reel");
 mkdirSync(join(out, "assets", "stills"), { recursive: true });
@@ -317,7 +317,7 @@ function captions(words: Word[], offset: number, sceneEnd: number) {
 
 function chips(f: Finding) {
   const p = PRIORITY[f.priority];
-  return `<span class="chip" style="--c:${p.color}"><i></i>${p.label}</span><span class="chip ghost">${WHO[f.who]}</span>`;
+  return `<span class="chip" style="--c:${p.color}"><i></i>${p.label}</span><span class="chip ghost">${WHO[f.who]}</span>${f.estimate ? `<span class="chip ghost">${esc(f.estimate)}</span>` : ""}`;
 }
 
 const findingScenes = timed.filter(t => t.scene.type === "finding");
@@ -350,7 +350,7 @@ for (const t of timed) {
     cam(still(scene.still), "img", start, dur, 0, 1, "blurred");
     const counts = Object.keys(PRIORITY).map(k => [k, findings.findings.filter(f => f.priority === k).length] as const).filter(([, n]) => n > 0);
     const tiles = counts.map(([k, n]) => `<div class="tile" style="--c:${PRIORITY[k].color}"><div class="num" data-n="${n}">0</div><div class="lbl"><i></i>${PRIORITY[k].label}</div></div>`).join("")
-      + (findings.positives.length ? `<div class="tile" style="--c:${GOOD}"><div class="num" data-n="${findings.positives.length}">0</div><div class="lbl"><i></i>Done right</div></div>` : "");
+      + (findings.positives.length ? `<div class="tile" style="--c:${GOOD}"><div class="num" data-n="${findings.positives.length}">0</div><div class="lbl"><i></i>${vocab.positives}</div></div>` : "");
     const areas = [...new Set(findings.findings.map(f => f.area))].map(a => `<span class="area">${esc(a)} <b>${findings.findings.filter(f => f.area === a).length}</b></span>`).join("");
     const lid = layer(start, dur, `<div class="overview"><div class="kicker">At a glance</div><h2>${esc(scene.headline)}</h2><div class="tiles">${tiles}</div><div class="areas">${areas}</div></div>`);
     js.push(`tl.fromTo("#${lid} .kicker, #${lid} h2",{opacity:0,y:30},{opacity:1,y:0,duration:0.7,stagger:0.12,ease:"power3.out"},${r3(start + 0.2)});`);
@@ -401,7 +401,7 @@ for (const t of timed) {
     else html.push(`<div class="clip layer paper" data-start="${start}" data-duration="${dur}" data-track-index="0"></div>`);
     const order = ["safety", "repair", "minor", "monitor"];
     const items = [...findings.findings].sort((a, b) => order.indexOf(a.priority) - order.indexOf(b.priority));
-    const rows = items.map(f => `<li style="--c:${PRIORITY[f.priority].color}"><i></i><span class="pl-title">${esc(f.title)}</span><span class="pl-who">${WHO[f.who]}</span></li>`).join("");
+    const rows = items.map(f => `<li style="--c:${PRIORITY[f.priority].color}"><i></i><span class="pl-title">${esc(f.title)}</span><span class="pl-who">${[WHO[f.who], f.estimate].filter(Boolean).map(x => esc(x!)).join(" · ")}</span></li>`).join("");
     const lid = layer(start, dur, `<div class="punch ${items.length > 12 ? "two" : ""}"><div class="kicker">Next steps</div><h2>${esc(scene.title)}</h2><ul>${rows}</ul><div class="punch-foot">Photos, timestamps and details for every item are in your written report.</div></div>`);
     js.push(`tl.fromTo("#${lid} .kicker, #${lid} h2",{opacity:0,y:24},{opacity:1,y:0,duration:0.6,stagger:0.1,ease:"power3.out"},${r3(start + 0.2)});`);
     js.push(`tl.fromTo("#${lid} li",{opacity:0,x:-24},{opacity:1,x:0,duration:0.4,stagger:${r3(Math.min(0.18, 2.2 / items.length))},ease:"power2.out"},${r3(start + 0.7)});`);
@@ -460,7 +460,7 @@ const doc = `<!doctype html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=${W}, height=${H}" />
-<title>${esc(brief.property.address)} · Inspection highlights</title>
+<title>${esc(subjectOf(brief).title)} · Inspection highlights</title>
 <script src="assets/gsap.min.js"></script>
 <style>${css}</style>
 </head>

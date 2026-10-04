@@ -83,24 +83,26 @@ fractions of the photo or clip itself.
 Every issue the person raised (or that is unmistakable on camera) gets a finding, in plain
 language per the profile. Be conservative: report what was said or clearly seen. Something you only
 *see* goes in only if unambiguous, with `confidence: "possible"`, flagged in `summary.md`.
-`fix` is the on-screen action: who does it, then ≤ 6 words ("Builder: reinstall boot dome-side up").
+`fix` is the on-screen action: who does it, then ≤ 6 words ("Builder: reinstall boot dome-side up",
+"Seller: replace leaking water pump"). `estimate` only when a cost was actually stated (see the profile).
 Give each finding `photo.annotations` (the PDF uses them).
 
-Also record **positives**: things explicitly called out as done right. Homeowners need to hear
+Also record **positives**: things explicitly called out as done right. Viewers need to hear
 what's good, not only what's wrong; it builds trust and keeps proportion.
 
 ## The reel (`edit.json`)
 
 **Pick the story that fits this footage.** Before writing scenes, decide in one or two sentences what
 this viewer most needs to come away with, and shape the reel around it. Some shapes that work:
-- *Walk the house*: chapters by area in walkthrough order. Easy to follow; good default.
+- *Walk it in order*: chapters by area in walkthrough order (around a house; or a car's
+  walkaround → interior → engine bay → underside → road test). Easy to follow; good default.
 - *Bottom line first*: open on the one or two items that matter most, then the rest quickly,
   then reassurance. Good when a few items dominate.
-- *Good news, then the list*: when the house is in great shape, lead with confidence and
+- *Good news, then the list*: when the home or vehicle is in great shape, lead with confidence and
   keep the punch list brisk.
 - Something else, if the material suggests it.
 
-Every reel needs a **title** (about the viewer: "Your new home's inspection"), the **findings**, and
+Every reel needs a **title** (about the viewer: "Your new home's inspection", "Your 911, inspected"), the **findings**, and
 an **outro**. `overview` (an honest one-line bottom line plus computed counts), `montage` (done right),
 and `punchlist` are strong defaults; drop or reorder them if your story is better without.
 Put `chapter` on a finding to introduce a new section.
@@ -140,7 +142,7 @@ where the defect is visible.
   plus each one's `delay`).
 
 **Narration (ai mode).** You write every `vo` line. This is where the reel becomes helpful or dry.
-- Talk to the viewer: "you", "your builder". Warm, plain, confident. Contractions are good.
+- Talk to the viewer: "you", "your builder", "the seller". Warm, plain, confident. Contractions are good.
 - The card already shows the title, so don't read it aloud. Say what it is, why it matters, and what
   happens next, in that spirit and in **1–3 short sentences (15–40 words)**.
 - Explain jargon in passing: "weep screed — a strip that lets trapped moisture drain out of the stucco".
@@ -189,6 +191,6 @@ you saw but excluded and why, and the story shape you chose and why, and the ree
 - Everything on screen must be true to the footage at that moment.
 - Don't attribute words or actions to a named person unless the footage makes it unambiguous who
   it was (the transcript doesn't identify speakers). "The inspectors" is always safe.
-- Don't add specifics nobody established (which room, which side of the house, a measurement)
-  unless it is said or plainly visible.
+- Don't add specifics nobody established (which room, which side of the house, which wheel or
+  cylinder, a measurement, a price) unless it is said, written in the supporting files, or plainly visible.
 - Don't edit files under `input/`, `media/`, `analysis/`, or the tools.

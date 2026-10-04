@@ -5,7 +5,7 @@
 import { copyFile, link, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, bucket, jobsDir, remoteWorkers } from "./server";
-import type { FindingSummary, Project, ProjectDetail, RunStatus } from "./types";
+import { mileage, projectDetails, projectTitle, type FindingSummary, type Project, type ProjectDetail, type RunStatus } from "./types";
 
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 
@@ -58,7 +58,7 @@ export async function detail(project: Project): Promise<Omit<ProjectDetail, "pro
     run,
     workerOnline: online,
     outputs: { reel: !!reel, report, poster, version: reel ? String(Math.round(reel.mtimeMs)) : null },
-    findings: (findings?.findings ?? []).map(({ id, area, title, priority, who, summary, fix, confidence }) => ({ id, area, title, priority, who, summary, fix, confidence })),
+    findings: (findings?.findings ?? []).map(({ id, area, title, priority, who, summary, fix, estimate, confidence }) => ({ id, area, title, priority, who, summary, fix, estimate, confidence })),
     positives: (findings?.positives ?? []).map(({ title, area }) => ({ title, area })),
     editorNotes,
     revisions: (await readJson<{ message: string; at: string }[]>(join(dir, "revisions.json"))) ?? [],
@@ -78,15 +78,19 @@ function briefFor(p: Project) {
   if (p.company.phone) company.phone = p.company.phone;
   if (p.company.website) company.website = p.company.website;
   if (/^#[0-9a-fA-F]{6}$/.test(p.company.accent)) company.accent = p.company.accent;
+  const subject = { title: projectTitle(p), details: projectDetails(p) };
+  const shared = { targetSeconds: [120, 180], voice: p.voice, subject, inspection: { date: readableDate(p.inspection.date), type: p.inspection.type }, company, notes: p.notes };
+  if (p.vertical === "vehicle") {
+    const v = p.vehicle;
+    const audience = /pre-sale|consignment/i.test(p.inspection.type) ? "prospective buyers" : /post-purchase|service/i.test(p.inspection.type) ? "owner" : "buyer";
+    const vehicle = Object.fromEntries(Object.entries({ ...v, mileage: mileage(v.mileage) }).filter(([, value]) => value));
+    return { profile: "vehicle-inspection", audience, vehicle, ...shared };
+  }
   return {
     profile: "home-inspection",
     audience: "homeowner",
-    targetSeconds: [120, 180],
-    voice: p.voice,
     property: { address: p.property.address, city: p.property.city || undefined, kind: p.property.kind || undefined },
-    inspection: { date: readableDate(p.inspection.date), type: p.inspection.type },
-    company,
-    notes: p.notes,
+    ...shared,
   };
 }
 

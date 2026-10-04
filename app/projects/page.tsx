@@ -6,7 +6,7 @@ import Shell from "../_components/shell";
 import { formatDate, request, timeAgo } from "../_components/api";
 import { StateBadge } from "../_components/state-badge";
 import { Button } from "@/components/ui/button";
-import type { ProjectListItem } from "@/lib/inspection/types";
+import { projectDetails, projectTitle, type ProjectListItem } from "@/lib/inspection/types";
 
 export default function ProjectsPage() {
   return <Shell><Projects /></Shell>;
@@ -42,9 +42,9 @@ function Projects() {
               <div className="absolute left-3 top-3"><StateBadge state={p.state} hasVideo={p.hasVideo} /></div>
             </div>
             <div className="p-4">
-              <h2 className="truncate font-semibold">{p.property.address}</h2>
+              <h2 className="truncate font-semibold">{projectTitle(p)}</h2>
               <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                {[p.inspection.type, formatDate(p.inspection.date), p.property.city].filter(Boolean).join(" · ")}
+                {[p.inspection.type, formatDate(p.inspection.date), ...projectDetails(p)].filter(Boolean).join(" · ")}
               </p>
               <p className="mt-3 text-xs text-muted-foreground">Updated {timeAgo(p.updatedAt)}</p>
             </div>

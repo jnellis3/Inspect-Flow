@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Brief, Edit, Findings, type Annotation, type Finding } from "../reel/schema.ts";
+import { Brief, Edit, Findings, WHO, subjectOf, wording, type Annotation, type Finding } from "../reel/schema.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const job = resolve(process.argv[2] ?? ".");
@@ -18,6 +18,9 @@ const data = Findings.parse(readJson("findings.json"));
 const edit = existsSync(join(job, "edit.json")) ? Edit.parse(readJson("edit.json")) : null;
 const probe = readJson("analysis/probe.json") as { width: number; height: number };
 const accent = brief.company.accent ?? "#FFD23F";
+const subject = subjectOf(brief);
+const vocab = wording(brief);
+const vin = brief.vehicle?.vin;
 const out = join(job, "report");
 mkdirSync(join(out, "assets", "photos"), { recursive: true });
 mkdirSync(join(job, "out"), { recursive: true });
@@ -29,7 +32,6 @@ const PRIORITY: Record<string, { label: string; color: string; blurb: string }> 
   minor: { label: "Minor fix", color: "#2563EB", blurb: "Small fix or touch-up" },
   monitor: { label: "Monitor", color: "#64748B", blurb: "Keep an eye on it" },
 };
-const WHO: Record<string, string> = { builder: "Builder", homeowner: "Homeowner", specialist: "Specialist" };
 const ORDER = ["safety", "repair", "minor", "monitor"];
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const mmss = (t: number) => `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
@@ -74,6 +76,7 @@ function figure(at: number, anns: Annotation[], crop?: { x: number; y: number; w
 }
 
 const sorted = [...data.findings].sort((a, b) => ORDER.indexOf(a.priority) - ORDER.indexOf(b.priority));
+const costs = data.findings.some(f => f.estimate);
 const counts = ORDER.map(k => [k, data.findings.filter(f => f.priority === k).length] as const).filter(([, n]) => n);
 const heroAt = edit?.scenes.find(s => s.type === "title")?.type === "title" ? (edit!.scenes.find(s => s.type === "title") as any).shot.in + 1 : data.findings[0]?.photo.at ?? 0;
 
@@ -82,18 +85,18 @@ function findingPage(f: Finding, i: number) {
   const quote = f.evidence.find(e => e.quote);
   return `<section class="finding" style="--c:${p.color}">
     <header><span class="n">${String(i + 1).padStart(2, "0")}</span><div><div class="area">${esc(f.area)}</div><h2>${esc(f.title)}</h2>
-      <div class="chips"><span class="chip pri"><i></i>${p.label}</span><span class="chip">${WHO[f.who]}</span>${f.confidence !== "confirmed" ? `<span class="chip soft">${f.confidence === "likely" ? "Likely" : "Possible, verify"}</span>` : ""}</div></div></header>
+      <div class="chips"><span class="chip pri"><i></i>${p.label}</span><span class="chip">${WHO[f.who]}</span>${f.estimate ? `<span class="chip">${esc(f.estimate)}</span>` : ""}${f.confidence !== "confirmed" ? `<span class="chip soft">${f.confidence === "likely" ? "Likely" : "Possible, verify"}</span>` : ""}</div></div></header>
     <div class="body">${figure(f.photo.at, f.photo.annotations, f.photo.crop, f.photo.src)}
     <div class="cols">
       <div><h3>What we saw</h3><p>${esc(f.summary)}</p></div>
       <div><h3>Why it matters</h3><p>${esc(f.whyItMatters)}</p></div>
-      <div class="todo"><h3>What to do</h3><p>${esc(f.recommendation)}</p></div>
+      <div class="todo"><h3>What to do</h3><p>${esc(f.recommendation)}</p>${f.estimate ? `<p class="est">Estimated cost: <b>${esc(f.estimate)}</b></p>` : ""}</div>
     </div></div>
     ${quote ? `<blockquote>“${esc(quote.quote!.trim())}”<cite>Inspector, video ${mmss(quote.in)}</cite></blockquote>` : `<div class="evidence">In the video at ${f.evidence.map(e => `${mmss(e.in)}–${mmss(e.out)}`).join(", ")}</div>`}
   </section>`;
 }
 
-const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(brief.property.address)}: Inspection report</title>
+const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(subject.title)}: Inspection report</title>
 <style>
 @font-face { font-family: Inter; src: url(assets/InterVariable.ttf); font-weight: 100 900; }
 @font-face { font-family: "Inter Display"; src: url(assets/InterDisplay-Bold.ttf); font-weight: 700; }
@@ -151,6 +154,9 @@ td .fix { color: var(--muted); font-size: 9pt; }
 .cols h3 { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 0 0 4px; }
 .cols p { margin: 0; }
 .todo p { font-weight: 600; }
+.todo p.est { margin-top: 6px; font-weight: 500; color: var(--muted); } .todo p.est b { color: var(--ink); }
+td.nowrap { white-space: nowrap; }
+.meta b.mono { font-family: ui-monospace, Menlo, monospace; letter-spacing: 0.02em; }
 blockquote { margin: 12px 0 0; padding: 8px 14px; border-left: 3px solid var(--accent); background: #fafaf7; font-style: italic; color: #333; }
 cite { display: block; font-style: normal; font-size: 8.5pt; color: var(--muted); margin-top: 2px; }
 .evidence { margin-top: 10px; font-size: 9pt; color: var(--muted); }
@@ -163,19 +169,19 @@ cite { display: block; font-style: normal; font-size: 8.5pt; color: var(--muted)
 <section class="cover">
   <div class="hero"><img src="${photo(heroAt)}"><div class="shade"></div><div class="txt">
     <div class="kicker">${esc(brief.inspection.type)} inspection</div>
-    <h1>${esc(brief.property.address)}</h1>${brief.property.city ? `<div class="sub">${esc(brief.property.city)}${brief.property.kind ? ` · ${esc(brief.property.kind)}` : ""}</div>` : ""}</div></div>
-  <div class="meta"><div><b>${esc(brief.inspection.date)}</b>Inspection date</div><div><b>${esc(brief.company.name)}</b>Inspected by</div>${brief.company.people.length ? `<div><b>${esc(brief.company.people.join(", "))}</b>Inspectors</div>` : ""}</div>
+    <h1>${esc(subject.title)}</h1>${subject.details.length ? `<div class="sub">${subject.details.map(esc).join(" · ")}</div>` : ""}</div></div>
+  <div class="meta"><div><b>${esc(brief.inspection.date)}</b>Inspection date</div><div><b>${esc(brief.company.name)}</b>Inspected by</div>${vin ? `<div><b class="mono">${esc(vin)}</b>VIN</div>` : ""}${brief.company.people.length ? `<div><b>${esc(brief.company.people.join(", "))}</b>Inspectors</div>` : ""}</div>
   <div class="glance"><div class="kicker" style="color:var(--muted)">At a glance</div><p>${esc(data.summary)}</p>
-    <div class="tiles">${counts.map(([k, n]) => `<div class="tile" style="--c:${PRIORITY[k].color}"><b>${n}</b><span><i></i>${PRIORITY[k].label}</span></div>`).join("")}${data.positives.length ? `<div class="tile" style="--c:#16A34A"><b>${data.positives.length}</b><span><i></i>Done right</span></div>` : ""}</div></div>
+    <div class="tiles">${counts.map(([k, n]) => `<div class="tile" style="--c:${PRIORITY[k].color}"><b>${n}</b><span><i></i>${PRIORITY[k].label}</span></div>`).join("")}${data.positives.length ? `<div class="tile" style="--c:#16A34A"><b>${data.positives.length}</b><span><i></i>${vocab.positives}</span></div>` : ""}</div></div>
   <div class="brandline"><span><b>${esc(brief.company.name)}</b>${brief.company.phone ? ` · ${esc(brief.company.phone)}` : ""}${brief.company.website ? ` · ${esc(brief.company.website)}` : ""}</span><span>Companion to your highlight video</span></div>
 </section>
-<section class="list"><div class="kicker" style="color:var(--muted)">Summary</div><h1>Punch list</h1>
-<table><thead><tr><th>#</th><th>Item</th><th>Area</th><th>Priority</th><th>Who</th><th>Video</th></tr></thead><tbody>
-${sorted.map((f, i) => `<tr><td class="num">${i + 1}</td><td><b>${esc(f.title)}</b><div class="fix">${esc(f.fix)}</div></td><td>${esc(f.area)}</td><td class="pri" style="--c:${PRIORITY[f.priority].color}"><i></i>${PRIORITY[f.priority].label}</td><td>${WHO[f.who]}</td><td>${mmss(f.evidence[0].in)}</td></tr>`).join("")}
+<section class="list"><div class="kicker" style="color:var(--muted)">Summary</div><h1>${vocab.list}</h1>
+<table><thead><tr><th>#</th><th>Item</th><th>Area</th><th>Priority</th><th>Who</th>${costs ? "<th>Estimate</th>" : ""}<th>Video</th></tr></thead><tbody>
+${sorted.map((f, i) => `<tr><td class="num">${i + 1}</td><td><b>${esc(f.title)}</b><div class="fix">${esc(f.fix)}</div></td><td>${esc(f.area)}</td><td class="pri" style="--c:${PRIORITY[f.priority].color}"><i></i>${PRIORITY[f.priority].label}</td><td>${WHO[f.who]}</td>${costs ? `<td class="nowrap">${esc(f.estimate ?? "")}</td>` : ""}<td>${mmss(f.evidence[0].in)}</td></tr>`).join("")}
 </tbody></table>
 </section>
 ${sorted.map(findingPage).join("\n")}
-${data.positives.length ? `<section class="good"><div class="kicker" style="color:var(--muted)">Good news</div><h1>Done right</h1><div class="goodgrid">
+${data.positives.length ? `<section class="good"><div class="kicker" style="color:var(--muted)">Good news</div><h1>${vocab.positives}</h1><div class="goodgrid">
 ${data.positives.map(p => `<div>${figure(p.at, [], undefined, p.src)}<h3>${esc(p.title)}</h3><p>${esc(p.note)}</p></div>`).join("")}</div></section>` : ""}
 ${data.limitations.length ? `<div class="limits"><b>About this report.</b> ${data.limitations.map(esc).join(" ")}</div>` : ""}
 </body></html>`;

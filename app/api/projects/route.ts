@@ -9,12 +9,12 @@ import { ProjectFields } from "@/lib/inspection/fields";
 export const GET = (req: Request) => api(req, async () => {
   const projects = await listProjects();
   const items: ProjectListItem[] = await Promise.all(projects.map(async p => ({
-    id: p.id, property: p.property, inspection: p.inspection, updatedAt: p.updatedAt,
+    id: p.id, vertical: p.vertical, property: p.property, vehicle: p.vehicle, inspection: p.inspection, updatedAt: p.updatedAt,
     state: (await readRun(p.id)).state,
     hasVideo: p.video?.status === "ready",
     poster: !!(await stat(join(jobDir(p.id), OUTPUTS.poster.file)).catch(() => null)),
   })));
-  return Response.json({ projects: items, defaults: projects[0] ? { company: projects[0].company, voice: projects[0].voice } : null });
+  return Response.json({ projects: items, defaults: projects[0] ? { vertical: projects[0].vertical, company: projects[0].company, voice: projects[0].voice } : null });
 });
 
 export const POST = (req: Request) => api(req, async () => {

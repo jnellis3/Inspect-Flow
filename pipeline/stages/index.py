@@ -23,7 +23,7 @@ PROMPT = """You are indexing raw walkthrough footage for a video editor. This cl
 (clip time 0 = source {a}s; report SOURCE seconds). The person filming is: {who}.
 
 Return ONLY JSON, no prose:
-{{"segments": [{{"start": s, "end": s, "area": "where the camera is (Roof, Garage exterior, Attic…)",
+{{"segments": [{{"start": s, "end": s, "area": "where the camera is (e.g. Roof, Attic, Engine bay, Underside…)",
    "camera": "steady|walking|talking-to-camera|close-up-detail|unusable (sky/ground/blur/whip)",
    "shows": "what is on screen, concrete", "said": "gist of what is said, or empty"}}],
  "moments": [{{"at": s, "kind": "issue|positive|establishing|people",
@@ -33,7 +33,7 @@ Return ONLY JSON, no prose:
 
 Rules: segments cover the clip end to end (3-20 s each). For moments: 'issue' only when the person
 says something is wrong or a defect is unmistakable; things they say they *look for* are not issues.
-'establishing' = good wide shots of the property. 'people' = friendly shots of the inspectors.
+'establishing' = good wide shots of the home or vehicle. 'people' = friendly shots of the inspectors.
 Timestamps to 0.5 s precision."""
 
 
@@ -73,7 +73,9 @@ def main():
         return
     duration = json.loads((job / "analysis" / "probe.json").read_text())["duration"]
     brief = json.loads((job / "brief.json").read_text())
-    who = f"{brief['company']['name']} doing a {brief['inspection']['type'].lower()} inspection"
+    # The model and trim help the indexer name parts; a street address wouldn't.
+    subject = (brief.get("subject") or {}).get("title", "") if brief.get("vehicle") else ""
+    who = f"{brief['company']['name']} doing a {brief['inspection']['type'].lower()} inspection" + (f" of {subject}" if subject else "")
     windows = [(a, min(duration, a + CHUNK)) for a in range(0, int(duration) + 1, CHUNK) if a < duration - 1]
     with tempfile.TemporaryDirectory() as tmp:
         files = [chunk_file(job / "media" / "proxy.mp4", a, b, tmp) for a, b in windows]

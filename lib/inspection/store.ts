@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authenticate, type Account } from "./auth";
 import { assertRequestOrigin } from "./origin";
 import { AppError, db } from "./server";
-import type { Project } from "./types";
+import { EMPTY_VEHICLE, projectTitle, type Project } from "./types";
 
 export { AppError, bucket, db } from "./server";
 
@@ -73,11 +73,17 @@ export async function api(request: Request, fn: () => Promise<Response>, options
 
 // ---------- projects ----------
 
+/** Projects saved before vehicles existed are home inspections. */
+function fromRow(r: { data: string; revision: number; updated_at: string }): Project {
+  const p = JSON.parse(r.data);
+  return { ...p, vertical: p.vertical ?? "home", vehicle: { ...EMPTY_VEHICLE, ...p.vehicle }, revision: r.revision, updatedAt: r.updated_at };
+}
+
 export async function getProject(id: string): Promise<Project> {
   const row = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE id = ? AND owner = ?")
     .bind(id, owner()).first<{ data: string; revision: number; updated_at: string }>();
   if (!row) throw new AppError(404, "Project not found.");
-  return { ...JSON.parse(row.data), revision: row.revision, updatedAt: row.updated_at };
+  return fromRow(row);
 }
 
 /** Optimistic write: fails with 409 if someone saved since `expected` was read. */
@@ -85,7 +91,7 @@ export async function saveProject(p: Project, expected: number): Promise<Project
   const now = new Date().toISOString();
   const next = { ...p, revision: expected + 1, updatedAt: now };
   const result = await db().prepare("UPDATE projects SET data = ?, address = ?, revision = revision + 1, updated_at = ? WHERE id = ? AND owner = ? AND revision = ?")
-    .bind(JSON.stringify(next), p.property.address, now, p.id, owner(), expected).run();
+    .bind(JSON.stringify(next), projectTitle(p), now, p.id, owner(), expected).run();
   if (result.meta.changes !== 1) throw new AppError(409, "This project changed in another window. Refresh and try again.");
   return next;
 }
@@ -102,13 +108,13 @@ export async function updateProject(id: string, change: (p: Project) => Project)
 
 export async function insertProject(p: Project) {
   await db().prepare("INSERT INTO projects (id, owner, address, revision, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(p.id, owner(), p.property.address, p.revision, JSON.stringify(p), p.createdAt, p.updatedAt).run();
+    .bind(p.id, owner(), projectTitle(p), p.revision, JSON.stringify(p), p.createdAt, p.updatedAt).run();
 }
 
 export async function listProjects(): Promise<Project[]> {
   const rows = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE owner = ? ORDER BY updated_at DESC LIMIT 200")
     .bind(owner()).all<{ data: string; revision: number; updated_at: string }>();
-  return rows.results.map(r => ({ ...JSON.parse(r.data), revision: r.revision, updatedAt: r.updated_at }));
+  return rows.results.map(fromRow);
 }
 
 export async function deleteProject(id: string) {

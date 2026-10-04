@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Inspect Flow · vehicle explainer</title>
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/fonts/InterVariable.ttf") format("truetype"); font-weight: 100 900; }
+      @font-face { font-family: "Inter Display"; src: url("assets/fonts/InterDisplay-Bold.ttf") format("truetype"); font-weight: 700; }
+      :root { --ink: #0b1220; --ink-2: #172033; --paper: #f7f6f2; --hl: #ffd23f; --muted: #5b6577; --safety: #ef4444; --repair: #f59e0b; --minor: #3b82f6; --good: #22c55e; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--ink); }
+      body { font-family: "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; }
+      .scene { position: absolute; inset: 0; overflow: hidden; }
+      .paper { background: var(--paper); color: var(--ink); }
+      .dark { background: radial-gradient(1400px 900px at 30% 20%, #1a2640, var(--ink)); color: #fff; }
+      .display { font-family: "Inter Display", "Inter", sans-serif; font-weight: 700; letter-spacing: -0.03em; line-height: 1.02; }
+      .kicker { font-size: 24px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+      .dark .kicker { color: rgba(255, 255, 255, 0.6); }
+      .mark { position: relative; display: inline-block; isolation: isolate; }
+      .mark i { position: absolute; left: -6px; right: -6px; bottom: 6px; height: 34%; background: var(--hl); z-index: -1; border-radius: 6px; transform-origin: 0 50%; }
+      .stack { position: absolute; display: flex; flex-direction: column; }
+
+      /* 1 · hook: the checklist */
+      .doc { position: absolute; left: 190px; top: 150px; width: 600px; height: 780px; background: #fff; border-radius: 18px; box-shadow: 0 40px 90px -30px rgb(11 18 32 / 0.35), 0 0 0 1px rgb(11 18 32 / 0.06); overflow: hidden; }
+      .doc-head { padding: 40px 44px 24px; border-bottom: 1px solid #ece9e1; }
+      .doc-head b { display: block; font-size: 30px; }
+      .doc-head span { display: block; margin-top: 6px; font-size: 18px; color: var(--muted); }
+      .doc-clip { position: absolute; left: 0; right: 0; top: 130px; bottom: 70px; overflow: hidden; }
+      .doc-body { position: absolute; left: 44px; right: 44px; top: 20px; }
+      .doc-body p { position: relative; height: 13px; margin: 0 0 19px 36px; border-radius: 4px; background: #e7e4dc; }
+      .doc-body p::before { content: ""; position: absolute; left: -36px; top: -4px; width: 20px; height: 20px; border-radius: 5px; border: 2.5px solid #cfcbc1; }
+      .doc-body h6 { height: 18px; width: 46%; margin: 30px 0 18px; border-radius: 4px; background: #cfcbc1; }
+      .doc-page { position: absolute; right: 26px; bottom: 22px; font-size: 18px; font-weight: 600; color: var(--muted); background: #f4f2ec; padding: 6px 12px; border-radius: 8px; }
+      .hook-copy { left: 900px; top: 300px; width: 900px; gap: 26px; }
+      .hook-copy .display { font-size: 92px; }
+
+      /* 2 · turn */
+      .turn { inset: 0; align-items: center; justify-content: center; text-align: center; }
+      .turn .display { font-size: 124px; }
+      .photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgb(8 12 20 / 0.9), rgb(8 12 20 / 0.35) 60%, rgb(8 12 20 / 0.1)); }
+      .meet { left: 130px; top: 0; bottom: 0; justify-content: center; gap: 22px; }
+      .meet .display { font-size: 110px; }
+      .logo { display: flex; align-items: center; gap: 22px; }
+      .logo-mark { width: 84px; height: 84px; border-radius: 22px; background: var(--ink); display: grid; place-items: center; }
+      .dark .logo-mark, .meet .logo-mark { background: #fff; }
+      .logo-mark svg { width: 34px; height: 34px; fill: var(--hl); margin-left: 6px; }
+      .meet .logo-mark svg { fill: var(--ink); }
+      .logo-name { font-family: "Inter Display", "Inter", sans-serif; font-weight: 700; font-size: 64px; letter-spacing: -0.03em; }
+
+      /* steps */
+      .step { left: 130px; top: 0; bottom: 0; width: 640px; justify-content: center; gap: 22px; }
+      .step-no { width: 76px; height: 76px; border-radius: 50%; background: var(--hl); color: var(--ink); display: grid; place-items: center; font: 700 40px "Inter Display", "Inter", sans-serif; }
+      .step .display { font-size: 76px; }
+      .step p { font-size: 30px; line-height: 1.4; color: var(--muted); max-width: 560px; }
+      .dark .step p { color: rgba(255, 255, 255, 0.7); }
+      .window { position: absolute; border-radius: 22px; background: #fff; box-shadow: 0 50px 120px -40px rgb(11 18 32 / 0.45), 0 0 0 1px rgb(11 18 32 / 0.06); overflow: hidden; }
+      .window-bar { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 22px; border-bottom: 1px solid #ece9e1; }
+      .window-bar i { width: 13px; height: 13px; border-radius: 50%; background: #e1ddd3; }
+      .window-bar span { margin-left: 14px; font-size: 17px; font-weight: 600; color: var(--muted); }
+
+      /* 3 · upload */
+      .up { left: 860px; top: 190px; width: 930px; height: 700px; }
+      .drop { position: absolute; left: 50px; right: 50px; top: 100px; height: 330px; border: 3px dashed #d6d1c5; border-radius: 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); font-size: 26px; font-weight: 600; }
+      .drop-icon { width: 76px; height: 76px; border-radius: 20px; background: var(--ink); display: grid; place-items: center; }
+      .drop-icon svg { width: 34px; height: 34px; stroke: var(--hl); fill: none; stroke-width: 2.5; }
+      .file { position: absolute; left: 250px; top: 232px; width: 430px; display: flex; align-items: center; gap: 18px; padding: 20px 24px; border-radius: 18px; background: #fff; box-shadow: 0 24px 50px -18px rgb(11 18 32 / 0.4), 0 0 0 1px rgb(11 18 32 / 0.08); }
+      .file-thumb { width: 92px; height: 62px; border-radius: 10px; background: url("assets/img/lift.jpg") center / cover; }
+      .file b { display: block; font-size: 24px; }
+      .file span { font-size: 18px; color: var(--muted); }
+      .extras { position: absolute; left: 50px; right: 50px; top: 446px; display: flex; gap: 12px; }
+      .extras span { padding: 8px 14px; border-radius: 10px; background: #f4f2ec; font-size: 18px; font-weight: 600; color: var(--muted); }
+      .progress { position: absolute; left: 50px; right: 50px; top: 520px; }
+      .progress-track { height: 16px; border-radius: 999px; background: #ece9e1; overflow: hidden; }
+      .progress-fill { height: 100%; width: 100%; background: var(--ink); border-radius: 999px; transform-origin: 0 50%; }
+      .progress-row { display: flex; justify-content: space-between; margin-top: 14px; font-size: 22px; font-weight: 600; color: var(--muted); }
+      .done { position: absolute; left: 50px; right: 50px; top: 606px; display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 700; color: #15803d; }
+      .done i { width: 40px; height: 40px; border-radius: 50%; background: var(--good); display: grid; place-items: center; color: #fff; font-style: normal; font-size: 24px; }
+
+      /* 4 · ai editor */
+      .transcript { left: 850px; top: 150px; width: 480px; height: 780px; line-height: 1.5; background: rgb(255 255 255 / 0.05); border: 1px solid rgb(255 255 255 / 0.1); border-radius: 22px; padding: 30px 30px; overflow: hidden; }
+      .transcript .kicker { margin-bottom: 22px; }
+      .tline { font-size: 23px; line-height: 1.5; color: rgba(255, 255, 255, 0.5); margin-bottom: 22px; }
+      .tline em { font-style: normal; font-weight: 700; color: var(--hl); font-size: 18px; margin-right: 8px; }
+      .tline .hit { color: #fff; padding: 0 3px; border-radius: 5px; -webkit-box-decoration-break: clone; box-decoration-break: clone;
+        background: linear-gradient(rgb(255 210 63 / 0.3), rgb(255 210 63 / 0.3)) no-repeat 0 0 / 0% 100%; }
+      .findings { left: 1370px; top: 150px; width: 430px; gap: 18px; }
+      .fcard { background: #fff; color: var(--ink); border-radius: 18px; padding: 22px 24px; border-left: 7px solid var(--c); box-shadow: 0 24px 60px -24px rgb(0 0 0 / 0.6); }
+      .fcard small { display: block; font-size: 16px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+      .fcard b { display: block; margin-top: 6px; font-size: 27px; line-height: 1.2; }
+      .chip { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 6px 13px; border-radius: 999px; font-size: 17px; font-weight: 700; background: color-mix(in srgb, var(--c) 16%, white); color: color-mix(in srgb, var(--c) 70%, black); }
+      .chip::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+      .scan { position: absolute; left: 850px; width: 480px; top: 150px; height: 3px; background: var(--hl); box-shadow: 0 0 24px 4px rgb(255 210 63 / 0.6); border-radius: 3px; }
+
+      /* 5 · closer look */
+      .cam { position: absolute; inset: 0; transform-origin: 0 0; }
+      .flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+      .card { position: absolute; left: 88px; top: 72px; max-width: 900px; padding: 28px 34px 30px 36px; border-radius: 22px; background: rgb(9 13 22 / 0.82); border-left: 7px solid var(--repair); color: #fff; }
+      .card small { font-size: 21px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(255, 255, 255, 0.66); }
+      .card b { display: block; margin-top: 10px; font: 700 54px/1.08 "Inter Display", "Inter", sans-serif; letter-spacing: -0.015em; }
+      .card .chip { --c: var(--repair); background: rgb(245 158 11 / 0.28); color: #fff; font-size: 22px; margin-top: 18px; }
+      .card .chip.est { background: rgb(255 255 255 / 0.12); margin-left: 8px; }
+      .card .chip.est::before { display: none; }
+      .fix { position: absolute; left: 88px; top: 352px; padding: 16px 26px 17px 22px; border-radius: 16px; background: rgb(9 13 22 / 0.82); color: #fff; font-size: 30px; font-weight: 650; }
+      .fix span { color: var(--hl); font-weight: 800; margin-right: 12px; }
+      .tag { position: absolute; right: 88px; top: 72px; display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 999px; background: rgb(9 13 22 / 0.8); color: #fff; font-size: 22px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+      .tag i { width: 12px; height: 12px; border-radius: 3px; background: var(--hl); }
+      .ann { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }
+      .ring-shadow { fill: none; stroke: rgb(0 0 0 / 0.45); stroke-width: 15; }
+      .ring { fill: none; stroke: var(--hl); stroke-width: 8; stroke-linecap: round; }
+      .lead { stroke: var(--hl); stroke-width: 5; stroke-linecap: round; }
+      .label { position: absolute; left: 1240px; top: 340px; padding: 0 26px; height: 66px; line-height: 66px; border-radius: 16px; background: var(--hl); color: #111; font-size: 32px; font-weight: 800; box-shadow: 0 14px 34px rgb(0 0 0 / 0.35); }
+      .caption-wrap { position: absolute; left: 0; right: 0; bottom: 78px; display: flex; justify-content: center; }
+      .caption { padding: 14px 30px 16px; border-radius: 18px; background: rgb(5 8 14 / 0.76); color: #fff; font-size: 44px; font-weight: 650; }
+      .caption b { color: var(--hl); font-weight: 650; }
+
+      /* 6 · deliverables */
+      .deliver-head { left: 130px; top: 110px; width: 1660px; gap: 14px; }
+      .deliver-head .display { font-size: 76px; }
+      .player { left: 130px; top: 360px; width: 820px; height: 560px; }
+      .player-video { position: absolute; left: 0; right: 0; top: 52px; bottom: 74px; background: url("assets/img/lift.jpg") center / cover; }
+      .player-video::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgb(8 12 20 / 0) 40%, rgb(8 12 20 / 0.55)); }
+      .play { position: absolute; left: 50%; top: 50%; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; background: rgb(255 255 255 / 0.92); display: grid; place-items: center; z-index: 2; }
+      .play svg { width: 40px; height: 40px; fill: var(--ink); margin-left: 8px; }
+      .player-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 74px; display: flex; align-items: center; gap: 18px; padding: 0 26px; font-size: 21px; font-weight: 600; color: var(--muted); }
+      .player-track { flex: 1; height: 10px; border-radius: 999px; background: #ece9e1; overflow: hidden; }
+      .player-track i { display: block; height: 100%; width: 100%; background: var(--hl); transform-origin: 0 50%; }
+      .pdf { left: 1000px; top: 360px; width: 380px; height: 560px; }
+      .pdf-body { padding: 26px 28px; }
+      .pdf-hero { height: 150px; border-radius: 12px; background: url("assets/img/lift.jpg") center / cover; }
+      .pdf-body b { display: block; margin-top: 18px; font-size: 26px; }
+      .pdf-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; font-size: 19px; font-weight: 600; }
+      .pdf-row i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); flex: none; }
+      .pdf-row em { margin-left: auto; font-style: normal; font-size: 16px; color: var(--muted); }
+      .chat { left: 1430px; top: 360px; width: 360px; gap: 18px; }
+      .bubble { padding: 20px 24px; border-radius: 22px; font-size: 25px; line-height: 1.35; font-weight: 550; }
+      .bubble.you { background: var(--ink); color: #fff; border-bottom-right-radius: 6px; }
+      .bubble.ai { background: #fff; color: var(--ink); border-bottom-left-radius: 6px; box-shadow: 0 18px 40px -20px rgb(11 18 32 / 0.4); }
+      .bubble.ai b { color: #15803d; }
+      .chat .kicker { font-size: 18px; }
+
+      /* 7 · end */
+      .end { inset: 0; align-items: center; justify-content: center; text-align: center; gap: 34px; }
+      .end .display { font-size: 84px; max-width: 1400px; }
+      .end .url { font-size: 34px; font-weight: 600; color: var(--hl); letter-spacing: 0.01em; }
+      .end .logo-mark { background: #fff; }
+      .end .logo-mark svg { fill: var(--ink); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="46" data-width="1920" data-height="1080">
+
+      <!-- 1 · Hook: the checklist nobody can picture -->
+      <section id="s1" class="clip scene paper" data-start="0" data-duration="6.4" data-track-index="0">
+        <div class="doc" id="doc">
+          <div class="doc-head"><b>Pre-Purchase Inspection</b><span>Section 6 · Underbody and drivetrain</span></div>
+          <div class="doc-clip"><div class="doc-body" id="doc-body">
+            <h6></h6><p style="width:86%"></p><p style="width:72%"></p><p style="width:80%"></p><p style="width:64%"></p>
+            <h6></h6><p style="width:78%"></p><p style="width:84%"></p><p style="width:70%"></p><p style="width:76%"></p>
+            <h6></h6><p style="width:82%"></p><p style="width:68%"></p><p style="width:85%"></p><p style="width:58%"></p>
+            <h6></h6><p style="width:74%"></p><p style="width:83%"></p><p style="width:66%"></p><p style="width:79%"></p>
+            <h6></h6><p style="width:80%"></p><p style="width:71%"></p><p style="width:86%"></p><p style="width:62%"></p>
+            <h6></h6><p style="width:77%"></p><p style="width:69%"></p><p style="width:84%"></p><p style="width:73%"></p>
+            <h6></h6><p style="width:81%"></p><p style="width:75%"></p><p style="width:67%"></p><p style="width:60%"></p>
+          </div></div>
+          <div class="doc-page">Item <span id="item-no">1</span> of 152</div>
+        </div>
+        <div class="stack hook-copy">
+          <div class="display" id="h1a">You spend hours on the car.</div>
+          <div class="display" id="h1b">The buyer <span class="mark">skims<i id="skim-mark"></i></span> a checklist.</div>
+        </div>
+      </section>
+
+      <!-- 2 · Turn: what if they could see it -->
+      <section id="s2a" class="clip scene dark" data-start="6.4" data-duration="2.4" data-track-index="0">
+        <div class="stack turn">
+          <div class="display" id="t2a">What if they could</div>
+          <div class="display" id="t2b"><span style="color: var(--hl)">see what you saw?</span></div>
+        </div>
+      </section>
+      <section id="s2b" class="clip scene dark" data-start="8.8" data-duration="2.6" data-track-index="0">
+        <div class="cam" id="lift-cam"><img class="photo" src="assets/img/lift.jpg" alt="" /></div>
+        <div class="shade"></div>
+        <div class="stack meet">
+          <div class="logo" id="meet-logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M6 3.5v17L20 12z"/></svg></div><div class="logo-name">Inspect Flow</div></div>
+          <div class="display" id="meet-line" style="font-size: 64px; max-width: 900px">Turns your inspection into a film your client can actually see.</div>
+        </div>
+      </section>
+
+      <!-- 3 · Step 1: upload -->
+      <section id="s3" class="clip scene paper" data-start="11.4" data-duration="7.2" data-track-index="0">
+        <div class="stack step" id="step1">
+          <div class="step-no">1</div>
+          <div class="display">Upload the raw inspection video.</div>
+          <p>Straight from your phone. Talk through what you find, like you already do.</p>
+        </div>
+        <div class="window up" id="up-window">
+          <div class="window-bar"><i></i><i></i><i></i><span>New project · Pre-purchase inspection</span></div>
+          <div class="drop" id="drop">
+            <div class="drop-icon" id="drop-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-5 5m5-5 5 5M5 20h14"/></svg></div>
+            <span id="drop-text">Drop your inspection video here</span>
+          </div>
+          <div class="file" id="file"><div class="file-thumb"></div><div><b>inspection.mov</b><span>14:12 · 4K · from iPhone</span></div></div>
+          <div class="extras" id="extras"><span>+ scan-report.pdf</span><span>+ compression.jpg</span><span>+ 6 photos</span></div>
+          <div class="progress" id="progress"><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div><div class="progress-row"><span>Uploading…</span><span id="pct">0%</span></div></div>
+          <div class="done" id="up-done"><i>✓</i>Uploaded. Your editor takes it from here.</div>
+        </div>
+      </section>
+
+      <!-- 4 · Step 2: the AI editor finds every issue -->
+      <section id="s4" class="clip scene dark" data-start="18.6" data-duration="8.2" data-track-index="0">
+        <div class="stack step" id="step2">
+          <div class="step-no">2</div>
+          <div class="display">The AI finds everything you called out.</div>
+          <p>It listens to what you said, watches what you filmed, and reads your scan reports.</p>
+        </div>
+        <div class="stack transcript" id="transcript">
+          <div class="kicker">What you said</div>
+          <div class="tline" id="tl1"><em>01:12</em>…okay, let&rsquo;s get it up in the air and have a look underneath…</div>
+          <div class="tline" id="tl2"><em>03:47</em>…you can see the <span class="hit">rear main seal is weeping</span>, oil&rsquo;s tracking down the bellhousing…</div>
+          <div class="tline" id="tl3"><em>06:20</em>…<span class="hit">paint meter reads factory</span> on every panel, no bodywork…</div>
+          <div class="tline" id="tl4"><em>09:05</em>…the <span class="hit">front tires are dated 2017</span>, so they&rsquo;re due regardless of tread…</div>
+        </div>
+        <div class="scan" id="scan"></div>
+        <div class="stack findings">
+          <div class="fcard" id="f1" style="--c: var(--repair)"><small>Underside · 1 of 9</small><b>Oil weeping at the rear main seal</b><span class="chip">Repair</span></div>
+          <div class="fcard" id="f2" style="--c: var(--good)"><small>Paint &amp; body · good news</small><b>Factory paint on every panel</b><span class="chip">Checks out</span></div>
+          <div class="fcard" id="f3" style="--c: var(--safety)"><small>Wheels &amp; tires · 3 of 9</small><b>Front tires are eight years old</b><span class="chip">Safety</span></div>
+        </div>
+      </section>
+
+      <!-- 5 · Step 3: the closer look -->
+      <section id="s5" class="clip scene dark" data-start="26.8" data-duration="8.6" data-track-index="0">
+        <div class="cam" id="leak-cam"><img class="photo" src="assets/img/leak.jpg" alt="" /></div>
+        <svg class="ann" viewBox="0 0 1920 1080">
+          <circle class="ring-shadow" id="ring-shadow" cx="1010" cy="560" r="150" />
+          <circle class="ring" id="ring" cx="1010" cy="560" r="150" stroke-dasharray="943" stroke-dashoffset="943" transform="rotate(-90 1010 560)" />
+          <line class="lead" id="lead" x1="1150" y1="505" x2="1240" y2="373" />
+        </svg>
+        <div class="label" id="label">Oil tracking down this seam</div>
+        <div class="flash" id="flash"></div>
+        <div class="tag" id="tag"><i></i>Closer look</div>
+        <div class="card" id="card"><small>Underside <span style="margin: 0 8px; opacity: .5">·</span> 1 of 9</small><b>Oil weeping at the rear main seal</b><span class="chip">Repair</span><span class="chip est">$1,800–2,400</span></div>
+        <div class="fix" id="fix"><span>→</span>Seller: reseal it, or adjust the price</div>
+        <div class="caption-wrap"><div class="caption" id="cap1">A slow seep now, and <b>it won&rsquo;t fix itself.</b></div></div>
+      </section>
+
+      <!-- 6 · Deliverables -->
+      <section id="s6" class="clip scene paper" data-start="35.4" data-duration="6.6" data-track-index="0">
+        <div class="stack deliver-head" id="deliver-head">
+          <div class="kicker">Step 3 · Send it</div>
+          <div class="display">A 2-minute video the buyer will watch. A report with the numbers.</div>
+        </div>
+        <div class="window player" id="player">
+          <div class="window-bar"><i></i><i></i><i></i><span>Highlight reel · 2:24</span></div>
+          <div class="player-video"></div>
+          <div class="play"><svg viewBox="0 0 24 24"><path d="M6 3.5v17L20 12z"/></svg></div>
+          <div class="player-bar"><span>0:38</span><div class="player-track"><i id="playhead"></i></div><span>2:24</span></div>
+        </div>
+        <div class="window pdf" id="pdf">
+          <div class="window-bar"><i></i><i></i><i></i><span>report.pdf</span></div>
+          <div class="pdf-body">
+            <div class="pdf-hero"></div>
+            <b>Findings at a glance</b>
+            <div class="pdf-row" style="--c: var(--safety)"><i></i>Front tires, 8 years old</div>
+            <div class="pdf-row" style="--c: var(--repair)"><i></i>Rear main seal<em>$1,800–2,400</em></div>
+            <div class="pdf-row" style="--c: var(--good)"><i></i>Factory paint, every panel</div>
+            <div class="pdf-row" style="--c: var(--minor)"><i></i>+ 7 more, with photos</div>
+          </div>
+        </div>
+        <div class="stack chat" id="chat">
+          <div class="kicker">Want changes? Just ask.</div>
+          <div class="bubble you" id="b1">Lead with the oil leak and keep it under two minutes.</div>
+          <div class="bubble ai" id="b2"><b>✓</b> Done. New version ready.</div>
+        </div>
+      </section>
+
+      <!-- 7 · End card -->
+      <section id="s7" class="clip scene dark" data-start="42" data-duration="4" data-track-index="0">
+        <div class="stack end">
+          <div class="logo" id="end-logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M6 3.5v17L20 12z"/></svg></div><div class="logo-name">Inspect Flow</div></div>
+          <div class="display" id="end-line">White-glove work deserves a white&#8209;glove report.</div>
+          <div class="url" id="end-url">inspectflow.nellisfamily.com/vehicles</div>
+        </div>
+      </section>
+
+      <audio id="music" src="assets/audio/music.mp3" data-start="0" data-duration="46" data-track-index="10" data-volume="1"
+        data-automation='{"version":1,"lanes":[{"target":"volume","points":[{"t":0,"v":0},{"t":0.8,"v":0.85},{"t":43.5,"v":0.85},{"t":46,"v":0}]}]}'></audio>
+    </div>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const ease = "power3.out";
+
+      // 1 · hook
+      tl.fromTo("#doc", { opacity: 0, x: -60, rotation: -2 }, { opacity: 1, x: 0, rotation: -2, duration: 0.8, ease }, 0.1);
+      tl.fromTo("#h1a", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.7, ease }, 0.5);
+      tl.fromTo("#h1b", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.7, ease }, 2.3);
+      tl.fromTo("#skim-mark", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.inOut" }, 3.0);
+      tl.fromTo("#doc-body", { y: 0 }, { y: -620, duration: 2.2, ease: "power2.in" }, 3.0);
+      tl.to("#doc", { opacity: 0.55, duration: 0.6 }, 4.6);
+      (() => { const o = { n: 1 }; const el = document.getElementById("item-no");
+        tl.to(o, { n: 152, duration: 2.2, ease: "power2.in", onUpdate: () => { el.textContent = Math.round(o.n); } }, 3.0); })();
+      tl.to("#doc, .hook-copy", { opacity: 0, x: -80, duration: 0.45, ease: "power2.in" }, 5.9);
+
+      // 2 · turn
+      tl.fromTo("#t2a", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease }, 6.55);
+      tl.fromTo("#t2b", { opacity: 0, y: 40, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "back.out(1.6)" }, 7.15);
+      tl.fromTo("#lift-cam", { scale: 1.12 }, { scale: 1.0, duration: 2.6, ease: "power1.out" }, 8.8);
+      tl.fromTo("#meet-logo", { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.6, ease }, 9.0);
+      tl.fromTo("#meet-line", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease }, 9.35);
+
+      // 3 · upload
+      tl.fromTo("#step1 > *", { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease }, 11.55);
+      tl.fromTo("#up-window", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.7, ease }, 11.7);
+      tl.fromTo("#file", { opacity: 0, x: 520, y: -260, rotation: 6 }, { opacity: 1, x: 0, y: 0, rotation: 0, duration: 1.0, ease: "power3.inOut" }, 12.6);
+      tl.fromTo("#drop", { borderColor: "#d6d1c5" }, { borderColor: "#0b1220", duration: 0.3 }, 13.3);
+      tl.to("#drop-icon, #drop-text", { opacity: 0, duration: 0.25 }, 13.25);
+      tl.fromTo("#extras span", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.15, ease }, 13.6);
+      tl.fromTo("#progress", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 13.8);
+      tl.fromTo("#progress-fill", { scaleX: 0 }, { scaleX: 1, duration: 2.4, ease: "power1.inOut" }, 13.9);
+      (() => { const o = { n: 0 }; const el = document.getElementById("pct");
+        tl.to(o, { n: 100, duration: 2.4, ease: "power1.inOut", onUpdate: () => { el.textContent = Math.round(o.n) + "%"; } }, 13.9); })();
+      tl.fromTo("#up-done", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, ease: "back.out(2)" }, 16.45);
+      tl.to("#up-window, #step1", { opacity: 0, y: -40, duration: 0.4, ease: "power2.in" }, 18.15);
+
+      // 4 · AI editor
+      tl.fromTo("#step2 > *", { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease }, 18.75);
+      tl.fromTo("#transcript", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.6, ease }, 18.95);
+      tl.fromTo("#transcript .tline", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.18 }, 19.2);
+      tl.fromTo("#scan", { opacity: 0, y: 60 }, { opacity: 1, y: 60, duration: 0.2 }, 19.9);
+      tl.to("#scan", { y: 700, duration: 4.1, ease: "none" }, 20.1);
+      tl.to("#scan", { opacity: 0, duration: 0.3 }, 24.1);
+      tl.fromTo("#tl2 .hit", { backgroundSize: "0% 100%" }, { backgroundSize: "100% 100%", duration: 0.45, ease: "power2.inOut" }, 20.6);
+      tl.fromTo("#f1", { opacity: 0, x: 60 }, { opacity: 1, x: 0, duration: 0.55, ease: "back.out(1.5)" }, 20.8);
+      tl.fromTo("#tl3 .hit", { backgroundSize: "0% 100%" }, { backgroundSize: "100% 100%", duration: 0.45, ease: "power2.inOut" }, 21.9);
+      tl.fromTo("#f2", { opacity: 0, x: 60 }, { opacity: 1, x: 0, duration: 0.55, ease: "back.out(1.5)" }, 22.1);
+      tl.fromTo("#tl4 .hit", { backgroundSize: "0% 100%" }, { backgroundSize: "100% 100%", duration: 0.45, ease: "power2.inOut" }, 23.2);
+      tl.fromTo("#f3", { opacity: 0, x: 60 }, { opacity: 1, x: 0, duration: 0.55, ease: "back.out(1.5)" }, 23.4);
+      tl.to("#step2, #transcript, .findings", { opacity: 0, duration: 0.4, ease: "power2.in" }, 26.4);
+
+      // 5 · closer look (live push → freeze → zoom → ring → label)
+      tl.fromTo("#leak-cam", { scale: 1, x: 0, y: 0 }, { scale: 1.05, x: -30, y: -20, duration: 1.6, ease: "none" }, 26.8);
+      tl.fromTo("#card", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.55, ease }, 27.0);
+      tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.9, duration: 0.08, yoyo: true, repeat: 1 }, 28.4);
+      tl.fromTo("#tag", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.3 }, 28.55);
+      tl.to("#leak-cam", { scale: 1.42, x: -357, y: -198, duration: 0.9, ease: "power3.inOut" }, 28.45);
+      tl.fromTo("#ring-shadow", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 29.4);
+      tl.fromTo("#ring", { strokeDashoffset: 943 }, { strokeDashoffset: 0, duration: 0.6, ease: "power2.inOut" }, 29.4);
+      tl.fromTo("#lead", { opacity: 0 }, { opacity: 1, duration: 0.25 }, 29.9);
+      tl.fromTo("#label", { opacity: 0, y: 12, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "back.out(2)" }, 30.0);
+      tl.fromTo("#cap1", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease }, 30.5);
+      tl.fromTo("#fix", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.5, ease }, 31.8);
+      tl.to("#ring, #ring-shadow, #lead, #label, #tag", { opacity: 0, duration: 0.3 }, 34.8);
+
+      // 6 · deliverables
+      tl.fromTo("#deliver-head > *", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease }, 35.55);
+      tl.fromTo("#player", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.7, ease }, 35.9);
+      tl.fromTo("#pdf", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.7, ease }, 36.1);
+      tl.fromTo("#playhead", { scaleX: 0.26 }, { scaleX: 0.6, duration: 5.2, ease: "none" }, 36.6);
+      tl.fromTo("#chat .kicker", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 37.6);
+      tl.fromTo("#b1", { opacity: 0, y: 20, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "back.out(1.8)" }, 38.0);
+      tl.fromTo("#b2", { opacity: 0, y: 20, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "back.out(1.8)" }, 39.4);
+      tl.to("#deliver-head, #player, #pdf, #chat", { opacity: 0, duration: 0.4, ease: "power2.in" }, 41.6);
+
+      // 7 · end card
+      tl.fromTo("#end-logo", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.7)" }, 42.15);
+      tl.fromTo("#end-line", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease }, 42.5);
+      tl.fromTo("#end-url", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 43.2);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

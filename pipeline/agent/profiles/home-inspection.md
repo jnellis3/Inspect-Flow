@@ -24,7 +24,8 @@ Foundation. Merge tiny areas.
 
 `who`: `builder` for new-construction punch-list items (the default for new builds); `homeowner`
 for maintenance the owner handles; `specialist` when the inspector recommends a licensed trade
-(roofer, electrician, plumber, HVAC, structural engineer).
+(roofer, electrician, plumber, HVAC, structural engineer). `seller` and `owner` are for vehicles;
+don't use them here. Leave `estimate` out unless the inspector stated a cost.
 
 ## Tone
 Reassuring and straight. The inspector's own judgment sets the temperature: "not terrible, super

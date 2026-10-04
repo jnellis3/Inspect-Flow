@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { AppError, api, getProject } from "@/lib/inspection/store";
 import { OUTPUTS, jobDir } from "@/lib/inspection/jobs";
+import { projectTitle } from "@/lib/inspection/types";
 
 type Context = { params: Promise<{ id: string; name: string }> };
 
@@ -17,7 +18,7 @@ export const GET = (req: Request, c: Context) => api(req, async () => {
   const info = await stat(path).catch(() => null);
   if (!info) throw new AppError(404, "This output isn't ready yet.");
 
-  const slug = project.property.address.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "inspection";
+  const slug = projectTitle(project).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "inspection";
   const headers = new Headers({
     "Content-Type": output.type,
     "Accept-Ranges": "bytes",

@@ -33,5 +33,5 @@ __pycache__/
 .DS_Store
 # Public marketing media is meant to ship; everything else media-like stays out of git.
 !public/marketing/*.mp4
-marketing/explainer/snapshots/
-marketing/explainer/renders/
+marketing/*/snapshots/
+marketing/*/renders/

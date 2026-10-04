@@ -12,7 +12,7 @@ import ProjectForm from "./project-form";
 import { StateBadge } from "./state-badge";
 import { uploadFile } from "./uploader";
 import { Markdown } from "./markdown";
-import type { FindingSummary, Project, ProjectDetail, RunStatus } from "@/lib/inspection/types";
+import { POSITIVES_LABEL, projectDetails, projectTitle, type FindingSummary, type Project, type ProjectDetail, type RunStatus } from "@/lib/inspection/types";
 
 const PRIORITY: Record<FindingSummary["priority"], { label: string; dot: string }> = {
   safety: { label: "Safety", dot: "bg-red-500" },
@@ -45,10 +45,10 @@ export default function ProjectView({ id }: { id: string }) {
       <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-3xl font-bold">{project.property.address}</h1>
+            <h1 className="font-display text-3xl font-bold">{projectTitle(project)}</h1>
             <StateBadge state={run.state} hasVideo={project.video?.status === "ready"} />
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">{[project.inspection.type, formatDate(project.inspection.date), project.property.city].filter(Boolean).join(" · ")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{[project.inspection.type, formatDate(project.inspection.date), ...projectDetails(project)].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="bg-white" onClick={() => setEditing(!editing)}>{editing ? <X /> : <Pencil />}{editing ? "Close" : "Edit details"}</Button>
@@ -332,7 +332,7 @@ function Results({ data, reload }: { data: ProjectDetail; reload: () => Promise<
         <section>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-lg font-semibold">What the video covers</h2>
-            <p className="text-sm text-muted-foreground">{counts.map(([k, n]) => `${n} ${PRIORITY[k].label.toLowerCase()}`).join(" · ")}{positives.length ? ` · ${positives.length} done right` : ""}</p>
+            <p className="text-sm text-muted-foreground">{counts.map(([k, n]) => `${n} ${PRIORITY[k].label.toLowerCase()}`).join(" · ")}{positives.length ? ` · ${positives.length} ${POSITIVES_LABEL[project.vertical].toLowerCase()}` : ""}</p>
           </div>
           <ul className="mt-4 grid gap-2.5">
             {findings.map(f => (
@@ -340,13 +340,13 @@ function Results({ data, reload }: { data: ProjectDetail; reload: () => Promise<
                 <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><span className={`size-2 rounded-full ${PRIORITY[f.priority].dot}`} />{PRIORITY[f.priority].label} · {f.area}{f.confidence !== "confirmed" && <span className="rounded bg-muted px-1.5 py-0.5">{f.confidence}</span>}</div>
                 <p className="mt-1 font-semibold">{f.title}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{f.summary}</p>
-                <p className="mt-2 text-sm font-medium">→ {f.fix}</p>
+                <p className="mt-2 text-sm font-medium">→ {f.fix}{f.estimate && <span className="ml-2 font-normal text-muted-foreground">· est. {f.estimate}</span>}</p>
               </li>
             ))}
           </ul>
           {positives.length > 0 && (
             <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
-              <p className="text-sm font-semibold text-emerald-900">Done right</p>
+              <p className="text-sm font-semibold text-emerald-900">{POSITIVES_LABEL[project.vertical]}</p>
               <ul className="mt-1.5 grid gap-1 text-sm text-emerald-900/80">{positives.map(p => <li key={p.title} className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0" />{p.title}</li>)}</ul>
             </div>
           )}
