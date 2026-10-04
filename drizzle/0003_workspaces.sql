@@ -50,3 +50,9 @@ UPDATE `app_users` SET `workspace_id` = `id`, `role` = 'owner';--> statement-bre
 ALTER TABLE `projects` RENAME COLUMN `owner` TO `workspace_id`;--> statement-breakpoint
 DROP INDEX `projects_owner_updated`;--> statement-breakpoint
 CREATE INDEX `projects_workspace_updated` ON `projects` (`workspace_id`,`updated_at`);
+--> statement-breakpoint
+-- A company's Spectora connection, its inspection links and its public watch links belong to the
+-- workspace too. Account ids became workspace ids above, so only the column names change.
+ALTER TABLE `spectora_connections` RENAME COLUMN `owner` TO `workspace_id`;--> statement-breakpoint
+ALTER TABLE `spectora_links` RENAME COLUMN `owner` TO `workspace_id`;--> statement-breakpoint
+ALTER TABLE `shares` RENAME COLUMN `owner` TO `workspace_id`;

@@ -15,7 +15,8 @@ test("an existing installation migrates: each account owns a workspace with its 
   const migrations = join(directory, "migrations");
   await mkdir(migrations);
   const all = (await readdir(resolve("drizzle"))).filter(name => name.endsWith(".sql")).sort();
-  for (const name of all.slice(0, 2)) await copyFile(join(resolve("drizzle"), name), join(migrations, name));
+  const at = all.findIndex(name => name.endsWith("_workspaces.sql"));
+  for (const name of all.slice(0, at)) await copyFile(join(resolve("drizzle"), name), join(migrations, name));
 
   let database = new LocalDatabase(join(directory, "data"), migrations);
   const user = database.prepare("INSERT INTO app_users (id,username,password_hash,created_at) VALUES (?,?,?,?)");
@@ -25,9 +26,12 @@ test("an existing installation migrates: each account owns a workspace with its 
   const company = { name: "Fixture Home Inspections", people: ["Tyler"], phone: "(281) 555-0100", website: "example.com", accent: "#123456" };
   await project.bind("older", "user-with-projects", "1 Old Rd", JSON.stringify({ company: { ...company, name: "Old Name" } }), "2026-01-01", "2026-01-01").run();
   await project.bind("newer", "user-with-projects", "2 New Rd", JSON.stringify({ company }), "2026-02-01", "2026-02-01").run();
+  await database.prepare("INSERT INTO spectora_connections (owner, api_key, webhook_token, created_at, updated_at) VALUES ('user-with-projects', 'sealed', 'fixture-token', '', '')").run();
+  await database.prepare("INSERT INTO spectora_links (owner, inspection_id, project_id, inspection_json, created_at, updated_at) VALUES ('user-with-projects', '42', 'newer', '{}', '', '')").run();
+  await database.prepare("INSERT INTO shares (token, project_id, owner, created_at) VALUES ('fixture-share-token', 'newer', 'user-with-projects', '')").run();
   database.close();
 
-  for (const name of all.slice(2)) await copyFile(join(resolve("drizzle"), name), join(migrations, name));
+  for (const name of all.slice(at)) await copyFile(join(resolve("drizzle"), name), join(migrations, name));
   database = new LocalDatabase(join(directory, "data"), migrations);
   t.after(() => database.close());
   const workspaces = (await database.prepare("SELECT id, name, profile, plan FROM workspaces ORDER BY created_at").all<{ id: string; name: string; profile: string; plan: string }>()).results;
@@ -41,6 +45,10 @@ test("an existing installation migrates: each account owns a workspace with its 
     { id: "user-without-projects", workspace_id: "user-without-projects", role: "owner" },
   ]);
   assert.deepEqual((await database.prepare("SELECT DISTINCT workspace_id FROM projects").all()).results, [{ workspace_id: "user-with-projects" }]);
+  // A Spectora connection, its links and watch links stay with the account's new workspace.
+  for (const table of ["spectora_connections", "spectora_links", "shares"]) {
+    assert.deepEqual((await database.prepare(`SELECT workspace_id FROM ${table}`).all()).results, [{ workspace_id: "user-with-projects" }], table);
+  }
 });
 
 test("workspaces: shared projects, isolation, invites, roles and the free video allowance", async suite => {
@@ -56,6 +64,8 @@ test("workspaces: shared projects, isolation, invites, roles and the free video 
     const store = await import("../lib/inspection/store");
     const workspaces = await import("../lib/inspection/workspaces");
     const jobs = await import("../lib/inspection/jobs");
+    const shares = await import("../lib/inspection/share");
+    const spectora = await import("../lib/inspection/spectora/store");
     const { db, bucket, jobsDir } = await import("../lib/inspection/server");
     close = () => db().close();
 
@@ -178,6 +188,39 @@ test("workspaces: shared projects, isolation, invites, roles and the free video 
       assert.deepEqual(await as(other, () => workspaces.videoUsage(loser)), { used: 4, limit: null, counted: true });
       // The other workspace's allowance is its own.
       assert.equal((await as(acme, () => workspaces.videoUsage())).used, 1);
+    });
+
+    await suite.test("watch links belong to the workspace and show its company to anyone holding them", async () => {
+      const share = await as(member, () => shares.ensureShare(shared.id));
+      assert.deepEqual(await as(acme, () => shares.getShare(shared.id)), share);  // a teammate's link is the team's
+      assert.equal(await as(other, () => shares.getShare(shared.id)), null);
+      await as(other, () => shares.revokeShares(shared.id));  // not theirs: no effect
+      // No one is signed in here, as on the public watch page.
+      const watched = await shares.projectForShare(share.token);
+      assert.equal(watched?.project.id, shared.id);
+      assert.deepEqual(watched?.project.inspectors, ["Tyler"]);
+      assert.equal(watched?.company.name, "Acme Fixture Inspections");
+      assert.equal((await jobs.detail(watched!.project)).run.state, "queued");
+      await as(acme, () => shares.revokeShares(shared.id));
+      assert.equal(await shares.projectForShare(share.token), null);
+    });
+
+    await suite.test("Spectora is set up by the owner and used by the whole workspace", async () => {
+      await assert.rejects(as(member, () => spectora.connect("fixture-key-that-is-long-enough")), { status: 403 });
+      await assert.rejects(as(member, () => spectora.disconnect()), { status: 403 });
+      // A webhook acts for the workspace with no one signed in: the project it creates is the team's.
+      const workspace = (await as(acme, () => workspaces.getWorkspace())).id;
+      const created = await store.asWorkspace(workspace, () => spectora.projectFromInspection(
+        { id: "insp-1", attributes: { address: "5 Spectora Way", inspectors: [{ first_name: "Avery", last_name: "Fixture" }] } }, workspace));
+      assert.deepEqual(created.inspectors, ["Avery Fixture"]);
+      assert.equal("company" in created, false);
+      assert.equal((await as(member, () => spectora.linkForProject(created.id)))?.inspectionId, "insp-1");
+      assert.equal(await as(other, () => spectora.linkForProject(created.id)), null);
+      assert.equal(await spectora.projectWorkspace(created.id), workspace);
+      // Without inspectors on the Spectora record, the workspace's most recent ones are used.
+      const fallback = await store.asWorkspace(workspace, () => spectora.projectFromInspection({ id: "insp-2", attributes: { address: "6 Spectora Way" } }, workspace));
+      assert.deepEqual(fallback.inspectors, ["Avery Fixture"]);
+      for (const id of [created.id, fallback.id]) await as(acme, async () => { await spectora.unlinkProject(id); await store.deleteProject(id); });
     });
 
     await suite.test("a removed teammate is signed out and their projects stay with the workspace", async () => {

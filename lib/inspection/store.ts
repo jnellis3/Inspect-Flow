@@ -9,6 +9,12 @@ export { AppError, bucket, db } from "./server";
 
 const context = new AsyncLocalStorage<Account>();
 
+/** Run `fn` for a workspace outside a signed-in request (webhooks, background follow-ups). It acts
+ *  as no particular person, with a member's permissions. */
+export function asWorkspace<T>(workspaceId: string, fn: () => Promise<T>): Promise<T> {
+  return context.run({ id: "", username: "", sessionHash: "", workspaceId, workspace: "", role: "member" }, fn);
+}
+
 /** The signed-in account for the current request. */
 export function account() {
   const current = context.getStore();
@@ -83,7 +89,7 @@ export async function api(request: Request, fn: () => Promise<Response>, options
 
 /** Projects saved before vehicles existed are home inspections; before workspaces, each project
  *  carried its own company details, which now belong to the workspace (all but the inspectors). */
-function fromRow(r: { data: string; revision: number; updated_at: string }): Project {
+export function projectFromRow(r: { data: string; revision: number; updated_at: string }): Project {
   const { company, ...p } = JSON.parse(r.data);
   return {
     ...p, vertical: p.vertical ?? "home", vehicle: { ...EMPTY_VEHICLE, ...p.vehicle }, inspectors: p.inspectors ?? company?.people ?? [],
@@ -95,7 +101,7 @@ export async function getProject(id: string): Promise<Project> {
   const row = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE id = ? AND workspace_id = ?")
     .bind(id, workspaceId()).first<{ data: string; revision: number; updated_at: string }>();
   if (!row) throw new AppError(404, "Project not found.");
-  return fromRow(row);
+  return projectFromRow(row);
 }
 
 /** Optimistic write: fails with 409 if someone saved since `expected` was read. */
@@ -126,7 +132,7 @@ export async function insertProject(p: Project) {
 export async function listProjects(): Promise<Project[]> {
   const rows = await db().prepare("SELECT data, revision, updated_at FROM projects WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200")
     .bind(workspaceId()).all<{ data: string; revision: number; updated_at: string }>();
-  return rows.results.map(fromRow);
+  return rows.results.map(projectFromRow);
 }
 
 export async function deleteProject(id: string) {

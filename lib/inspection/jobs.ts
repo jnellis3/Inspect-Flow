@@ -6,7 +6,7 @@ import { copyFile, link, mkdir, readFile, rename, rm, stat, writeFile } from "no
 import { join } from "node:path";
 import { AppError, bucket, jobsDir, remoteWorkers } from "./server";
 import { workspaceId } from "./store";
-import { getWorkspace, countVideo, videoUsage } from "./workspaces";
+import { countVideo, getWorkspace } from "./workspaces";
 import { mileage, projectDetails, projectTitle, type Company, type FindingSummary, type Project, type ProjectDetail, type RunStatus } from "./types";
 
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -47,10 +47,11 @@ export const OUTPUTS = {
   poster: { file: "out/poster.jpg", type: "image/jpeg", download: "poster.jpg" },
 } as const;
 
-export async function detail(project: Project): Promise<Omit<ProjectDetail, "project">> {
+/** What the job directory says about a project. Needs no signed-in account (public watch pages use it). */
+export async function detail(project: Project): Promise<Omit<ProjectDetail, "project" | "usage">> {
   const dir = jobDir(project.id);
-  const [run, online, usage, reel, report, poster] = await Promise.all([
-    readRun(project.id), workerOnline(), videoUsage(project.id),
+  const [run, online, reel, report, poster] = await Promise.all([
+    readRun(project.id), workerOnline(),
     stat(join(dir, OUTPUTS.reel.file)).catch(() => null), exists(join(dir, OUTPUTS.report.file)), exists(join(dir, OUTPUTS.poster.file)),
   ]);
   const findings = await readJson<{ findings?: FindingSummary[]; positives?: { title: string; area: string }[] }>(join(dir, "findings.json"));
@@ -64,7 +65,6 @@ export async function detail(project: Project): Promise<Omit<ProjectDetail, "pro
     positives: (findings?.positives ?? []).map(({ title, area }) => ({ title, area })),
     editorNotes,
     revisions: (await readJson<{ message: string; at: string }[]>(join(dir, "revisions.json"))) ?? [],
-    usage,
   };
 }
 

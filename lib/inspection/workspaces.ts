@@ -11,18 +11,25 @@ const trialVideos = () => Number(process.env.TRIAL_VIDEO_LIMIT || 3);
 const limitFor = (plan: Plan) => plan === "unlimited" ? null : trialVideos();
 const INVITE_MS = 7 * 86400000;
 
-export async function getWorkspace(): Promise<Workspace> {
-  const row = await db().prepare("SELECT id, name, profile, plan FROM workspaces WHERE id = ?")
-    .bind(workspaceId()).first<{ id: string; name: string; profile: string; plan: Plan }>();
-  if (!row) throw new AppError(404, "Workspace not found.");
+type Row = { id: string; name: string; profile: string; plan: Plan };
+const companyFrom = (row: Row): Company => {
   const profile = JSON.parse(row.profile) as Partial<Company>;
+  return { name: row.name, phone: profile.phone ?? "", website: profile.website ?? "", accent: profile.accent ?? "" };
+};
+const rowFor = (id: string) => db().prepare("SELECT id, name, profile, plan FROM workspaces WHERE id = ?").bind(id).first<Row>();
+
+export async function getWorkspace(): Promise<Workspace> {
+  const row = await rowFor(workspaceId());
+  if (!row) throw new AppError(404, "Workspace not found.");
   const { used, limit } = await videoUsage();
-  return {
-    id: row.id,
-    company: { name: row.name, phone: profile.phone ?? "", website: profile.website ?? "", accent: profile.accent ?? "" },
-    plan: row.plan,
-    usage: { used, limit },
-  };
+  return { id: row.id, company: companyFrom(row), plan: row.plan, usage: { used, limit } };
+}
+
+/** A workspace's company profile, outside a signed-in request (public watch pages). */
+export async function companyOf(id: string): Promise<Company> {
+  const row = await rowFor(id);
+  if (!row) throw new AppError(404, "Workspace not found.");
+  return companyFrom(row);
 }
 
 export async function updateCompany({ name, ...profile }: Company) {
