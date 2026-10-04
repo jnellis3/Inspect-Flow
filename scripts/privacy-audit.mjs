@@ -20,6 +20,12 @@ for(const path of files){
  const bytes=readFileSync(path);if(bytes.includes(0))continue;
  const text=bytes.toString('utf8');for(const [label,pattern] of patterns)if(pattern.test(text))failures.push(`${path}: ${label}`);
 }
+// Commits already published with a personal author email. History can't un-publish them, so only
+// their email check is skipped; their files are still audited. Don't add to this list: turn on
+// GitHub's "Keep my email addresses private" so web merges use the noreply address.
+const publishedEmailExceptions=new Set([
+ 'e77a936ba3ce916fcbe3f4fff4b4c8f835a752ed', // PR #1 merged on github.com, 2026-10-04
+]);
 let commits=[];try{commits=execFileSync('git',['rev-list','--all'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim().split('\n').filter(Boolean)}catch{}
 for(const commit of commits){
  const [author,committer,subject]=execFileSync('git',['show','-s','--format=%ae%n%ce%n%s',commit],{encoding:'utf8'}).trim().split('\n');
@@ -27,7 +33,7 @@ for(const commit of commits){
  if(committer==='noreply@github.com'&&/^Merge [0-9a-f]{40} into [0-9a-f]{40}$/.test(subject))continue;
  // Merges made on github.com are committed by GitHub itself; authors must still use a noreply address.
  const noreply=email=>email.endsWith('@users.noreply.github.com');
- if(!noreply(author)||!(noreply(committer)||committer==='noreply@github.com'))failures.push(`${commit.slice(0,12)}: use a GitHub noreply commit email`);
+ if(!publishedEmailExceptions.has(commit)&&(!noreply(author)||!(noreply(committer)||committer==='noreply@github.com')))failures.push(`${commit.slice(0,12)}: use a GitHub noreply commit email`);
  const paths=execFileSync('git',['ls-tree','-r','--name-only',commit],{encoding:'utf8'}).trim().split('\n').filter(Boolean);
  for(const path of paths){
   if(path!=='.env.example'&&!publicMedia.test(path)&&forbiddenPath.test(path))failures.push(`${commit.slice(0,12)}:${path}: private file in history`);
