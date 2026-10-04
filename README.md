@@ -17,9 +17,8 @@ cp .env.example .env        # paste your OPENROUTER_API_KEY
 docker compose up -d --build
 ```
 
-Open **http://localhost:3000** and create the first account (registration closes after it unless
-`ALLOW_REGISTRATION=true`). Use a passphrase of at least 15 characters; there is no password
-recovery yet.
+Open **http://localhost:3000** and create a workspace for your company. Use a passphrase of at
+least 15 characters; there is no password recovery yet.
 
 > In OpenRouter, turn **off** the *Sensitive Info* guardrail for this key. It redacts addresses
 > and emails the report needs, and it blocks long agent sessions (`redaction_context_lost`).
@@ -32,8 +31,9 @@ recovery yet.
               progress, outputs        request.json, status.json, out/      → AI director → render → PDF
 ```
 
-- **app** (this directory): accounts, projects, resumable chunked uploads, live progress, video
-  playback and downloads, change requests. SQLite + files on the `inspection-data` volume.
+- **app** (this directory): workspaces and accounts, projects, resumable chunked uploads, live
+  progress, video playback and downloads, change requests. SQLite + files on the
+  `inspection-data` volume.
 - **worker** ([`pipeline/`](pipeline/README.md)): runs one job at a time. The director is Claude
   Code running headless inside the container, talking to OpenRouter; narration
   (`openai/gpt-audio-mini`), music (`google/lyria-3-pro-preview`) and the first-pass video index
@@ -90,13 +90,33 @@ scripts/install-autodeploy.sh        # optional: deploy every push to main autom
 | `AGENT_MODEL` | `anthropic/claude-sonnet-5.5` | Director model; any OpenRouter id. |
 | `APP_ORIGIN` | `http://localhost:3000` | Exact public origin (CSRF and cookies). HTTPS required beyond localhost. |
 | `BIND_ADDRESS` / `PORT` | `127.0.0.1` / `3000` | Where the app is published on the host. |
-| `ALLOW_REGISTRATION` | `false` | Allow accounts beyond the first. |
+| `ALLOW_REGISTRATION` | `true` | Let anyone sign up and create a workspace. `false`: only the first account and invited teammates. |
+| `TRIAL_VIDEO_LIMIT` | `3` | Free videos per new workspace. |
 
 To keep the key out of `.env`, put it in `secrets/openrouter_api_key` and run
 `docker compose -f compose.yaml -f compose.secrets.yaml up -d --build`.
 
 For remote access, put a TLS reverse proxy (e.g. Caddy) in front of the app, set `APP_ORIGIN`
 to the public `https://` origin, and allow request bodies of at least 9 MB (upload parts are 8 MB).
+
+## Workspaces
+
+One installation serves many companies. A **workspace** is one inspection company: everyone in it
+shares its projects and its company profile (name, phone, website, brand color, used in every
+video and report), and nothing is visible across workspaces.
+
+- Signing up creates a workspace and makes you its **owner**. Owners edit the company profile and
+  invite teammates from **Workspace** settings: each invite link works once and expires in 7 days.
+  Teammates (**members**) can create, run and delete projects.
+- New workspaces are on the free **trial** plan: `TRIAL_VIDEO_LIMIT` videos. A video is counted
+  the first time a project is sent for one; retries and change requests are free, and deleting a
+  project doesn't give its video back. Accounts created before workspaces existed became owners of
+  `unlimited` workspaces. To lift a workspace's limit by hand:
+
+  ```sh
+  docker compose -f compose.prod.yaml exec app node -e 'const db = new (require("node:sqlite").DatabaseSync)("/data/inspect-flow.sqlite"); console.log(db.prepare("UPDATE workspaces SET plan = ? WHERE name = ?").run("unlimited", process.argv[1]))' "Company Name"
+  ```
+- The video queue takes turns between workspaces, so one company's batch doesn't hold up the rest.
 
 ## Data and backups
 

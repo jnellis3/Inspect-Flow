@@ -15,14 +15,14 @@ function NewProject() {
   const router = useRouter();
   const [initial, setInitial] = useState<Fields | null>(null);
   useEffect(() => {
-    // Start from the company details, voice and kind of inspection used last time;
+    // Start from the inspectors, voice and kind of inspection used last time in this workspace;
     // a link like /new?type=vehicle (from a landing page) picks the kind.
     const asked = new URLSearchParams(window.location.search).get("type");
     const start = (d: Partial<Fields>) => {
       const vertical: Vertical = asked === "vehicle" || asked === "home" ? asked : d.vertical ?? "home";
       setInitial(withVertical({ ...EMPTY, ...d }, vertical));
     };
-    request<{ defaults: Pick<Fields, "vertical" | "company" | "voice"> | null }>("/api/projects")
+    request<{ defaults: Pick<Fields, "vertical" | "inspectors" | "voice"> | null }>("/api/projects")
       .then(d => start(d.defaults ?? {}))
       .catch(() => start({}));
   }, []);

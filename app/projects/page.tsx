@@ -6,7 +6,7 @@ import Shell from "../_components/shell";
 import { formatDate, request, timeAgo } from "../_components/api";
 import { StateBadge } from "../_components/state-badge";
 import { Button } from "@/components/ui/button";
-import { projectDetails, projectTitle, type ProjectListItem } from "@/lib/inspection/types";
+import { projectDetails, projectTitle, type ProjectListItem, type VideoUsage } from "@/lib/inspection/types";
 
 export default function ProjectsPage() {
   return <Shell><Projects /></Shell>;
@@ -14,14 +14,15 @@ export default function ProjectsPage() {
 
 function Projects() {
   const [projects, setProjects] = useState<ProjectListItem[] | null>(null);
+  const [usage, setUsage] = useState<VideoUsage>({ used: 0, limit: null });
   const [error, setError] = useState("");
   useEffect(() => {
-    request<{ projects: ProjectListItem[] }>("/api/projects").then(d => setProjects(d.projects)).catch(e => setError(e.message));
+    request<{ projects: ProjectListItem[]; usage: VideoUsage }>("/api/projects").then(d => { setProjects(d.projects); setUsage(d.usage); }).catch(e => setError(e.message));
   }, []);
 
   if (error) return <p className="rounded-xl bg-orange-50 p-4 text-sm text-orange-900">{error}</p>;
   if (!projects) return <div className="grid min-h-[40vh] place-items-center text-muted-foreground"><LoaderCircle className="animate-spin" /></div>;
-  if (!projects.length) return <Welcome />;
+  if (!projects.length) return <Welcome usage={usage} />;
 
   return (
     <>
@@ -30,6 +31,7 @@ function Projects() {
           <h1 className="font-display text-3xl font-bold">Your projects</h1>
           <p className="mt-1 text-sm text-muted-foreground">Each project turns one walkthrough into a highlight video and a written report.</p>
         </div>
+        {usage.limit !== null && <Link href="/settings" className="shrink-0 rounded-full border bg-card px-3 py-1 text-xs font-medium hover:bg-muted">{usage.used} of {usage.limit} free videos used</Link>}
       </div>
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {projects.map(p => (
@@ -55,7 +57,7 @@ function Projects() {
   );
 }
 
-function Welcome() {
+function Welcome({ usage }: { usage: VideoUsage }) {
   const steps = [
     { icon: Upload, title: "Upload your walkthrough", text: "The raw video from your phone, talking through what you see. Add close-up photos if you have them." },
     { icon: Clapperboard, title: "AI edits it for you", text: "It finds every issue you pointed out, picks the clearest shots, labels them, and writes the narration." },
@@ -65,6 +67,7 @@ function Welcome() {
     <section className="mx-auto max-w-3xl py-10 text-center">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Welcome</p>
       <h1 className="mt-3 font-display text-4xl font-bold leading-tight sm:text-5xl">Turn a walkthrough into a video<br className="hidden sm:block" /> your client will actually watch.</h1>
+      {usage.limit !== null && usage.used < usage.limit && <p className="mt-4 text-muted-foreground">{usage.used ? `${usage.limit - usage.used} free videos left.` : `Your first ${usage.limit} videos are free.`}</p>}
       <div className="mt-12 grid gap-4 text-left sm:grid-cols-3">
         {steps.map(({ icon: Icon, title, text }, i) => (
           <div key={title} className="rounded-2xl border bg-card p-5">

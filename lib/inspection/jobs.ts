@@ -5,7 +5,9 @@
 import { copyFile, link, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, bucket, jobsDir, remoteWorkers } from "./server";
-import { mileage, projectDetails, projectTitle, type FindingSummary, type Project, type ProjectDetail, type RunStatus } from "./types";
+import { workspaceId } from "./store";
+import { getWorkspace, countVideo, videoUsage } from "./workspaces";
+import { mileage, projectDetails, projectTitle, type Company, type FindingSummary, type Project, type ProjectDetail, type RunStatus } from "./types";
 
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 
@@ -47,8 +49,8 @@ export const OUTPUTS = {
 
 export async function detail(project: Project): Promise<Omit<ProjectDetail, "project">> {
   const dir = jobDir(project.id);
-  const [run, online, reel, report, poster] = await Promise.all([
-    readRun(project.id), workerOnline(),
+  const [run, online, usage, reel, report, poster] = await Promise.all([
+    readRun(project.id), workerOnline(), videoUsage(project.id),
     stat(join(dir, OUTPUTS.reel.file)).catch(() => null), exists(join(dir, OUTPUTS.report.file)), exists(join(dir, OUTPUTS.poster.file)),
   ]);
   const findings = await readJson<{ findings?: FindingSummary[]; positives?: { title: string; area: string }[] }>(join(dir, "findings.json"));
@@ -62,6 +64,7 @@ export async function detail(project: Project): Promise<Omit<ProjectDetail, "pro
     positives: (findings?.positives ?? []).map(({ title, area }) => ({ title, area })),
     editorNotes,
     revisions: (await readJson<{ message: string; at: string }[]>(join(dir, "revisions.json"))) ?? [],
+    usage,
   };
 }
 
@@ -72,12 +75,13 @@ function readableDate(value: string) {
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
-/** The pipeline's brief.json: what the director agent knows about the job. */
-function briefFor(p: Project) {
-  const company: Record<string, unknown> = { name: p.company.name || "Your inspector", people: p.company.people.filter(Boolean) };
-  if (p.company.phone) company.phone = p.company.phone;
-  if (p.company.website) company.website = p.company.website;
-  if (/^#[0-9a-fA-F]{6}$/.test(p.company.accent)) company.accent = p.company.accent;
+/** The pipeline's brief.json: what the director agent knows about the job. The company is the
+ *  workspace's; the people are the inspectors on this project. */
+function briefFor(p: Project, c: Company) {
+  const company: Record<string, unknown> = { name: c.name || "Your inspector", people: p.inspectors.filter(Boolean) };
+  if (c.phone) company.phone = c.phone;
+  if (c.website) company.website = c.website;
+  if (/^#[0-9a-fA-F]{6}$/.test(c.accent)) company.accent = c.accent;
   const subject = { title: projectTitle(p), details: projectDetails(p) };
   const shared = { targetSeconds: [120, 180], voice: p.voice, subject, inspection: { date: readableDate(p.inspection.date), type: p.inspection.type }, company, notes: p.notes };
   if (p.vertical === "vehicle") {
@@ -123,13 +127,14 @@ export async function queueRun(p: Project, kind: "produce" | "revise", message =
   if (p.video?.status !== "ready") throw new AppError(409, "Upload the walkthrough video first.");
   if (p.supporting.some(f => f.status !== "ready")) throw new AppError(409, "Wait for the supporting files to finish uploading.");
   if (kind === "revise" && !(await exists(join(dir, OUTPUTS.reel.file)))) throw new AppError(409, "There's no finished video to revise yet.");
+  if (kind === "produce") await countVideo(p.id);
 
   await mkdir(join(dir, "input"), { recursive: true });
   await mkdir(join(dir, "supporting"), { recursive: true });
   await place(`${p.id}/source`, join(dir, "input", `walkthrough.${extension(p.video.type, p.video.name)}`));
   const taken = new Set<string>();
   for (const f of p.supporting) await place(`${p.id}/supporting/${f.id}`, join(dir, "supporting", safeName(f.name, taken)));
-  await writeJson(join(dir, "brief.json"), briefFor(p));
+  await writeJson(join(dir, "brief.json"), briefFor(p, (await getWorkspace()).company));
   const now = new Date().toISOString();
   await writeJson(join(dir, "request.json"), { kind, message, requestedAt: now });
   if (kind === "revise") {
@@ -137,7 +142,7 @@ export async function queueRun(p: Project, kind: "produce" | "revise", message =
     await writeJson(join(dir, "revisions.json"), [...history, { message, at: now }]);
   }
   await rm(join(dir, "cancel"), { force: true });
-  await writeJson(join(dir, "status.json"), { state: "queued", kind, queuedAt: now, stage: null, note: null, error: null });
+  await writeJson(join(dir, "status.json"), { state: "queued", kind, workspace: workspaceId(), queuedAt: now, stage: null, note: null, error: null });
 }
 
 export async function cancelRun(projectId: string) {

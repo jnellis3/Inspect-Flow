@@ -1,4 +1,5 @@
-// The app's domain model. A project is one inspection: its details, its uploads, and the
+// The app's domain model. A workspace is one inspection company: its members, its company
+// profile, and its projects. A project is one inspection: its details, its uploads, and the
 // pipeline job that turns them into a highlight reel and a PDF report.
 
 export type VoiceMode = "ai" | "source";
@@ -7,6 +8,24 @@ export type VoiceMode = "ai" | "source";
 export type Vertical = "home" | "vehicle";
 
 export type Vehicle = { year: string; make: string; model: string; trim: string; vin: string; mileage: string; location: string };
+
+/** How the company appears in its videos and reports. Shared by everyone in the workspace. */
+export type Company = { name: string; phone: string; website: string; accent: string };
+
+export type Role = "owner" | "member";
+
+/** "trial" workspaces get a few free videos; "unlimited" ones have no cap. */
+export type Plan = "trial" | "unlimited";
+
+/** Videos the workspace has started, and how many its plan allows (null: no limit). */
+export type VideoUsage = { used: number; limit: number | null };
+
+/** The workspace is named after its company (`company.name`). */
+export type Workspace = { id: string; company: Company; plan: Plan; usage: VideoUsage };
+
+export type Member = { id: string; username: string; role: Role; createdAt: number };
+
+export type Invite = { id: string; createdAt: number; expiresAt: number };
 
 /** A file being (or already) uploaded in chunks. */
 export type Upload = {
@@ -29,7 +48,7 @@ export type Project = {
   property: { address: string; city: string; kind: string };
   vehicle: Vehicle;
   inspection: { date: string; type: string };
-  company: { name: string; people: string[]; phone: string; website: string; accent: string };
+  inspectors: string[];
   voice: { mode: VoiceMode; voice: string };
   notes: string;
   video: Upload | null;
@@ -42,6 +61,8 @@ export type RunState = "idle" | "queued" | "running" | "done" | "failed" | "canc
 export type RunStatus = {
   state: RunState;
   kind?: "produce" | "revise";
+  /** Whose job it is, so the queue can take turns between workspaces. */
+  workspace?: string;
   stage?: string | null;
   activity?: string | null;
   note?: string | null;
@@ -73,6 +94,8 @@ export type ProjectDetail = {
   positives: { title: string; area: string }[];
   editorNotes: string;
   revisions: { message: string; at: string }[];
+  /** `counted`: this project already used one of the workspace's videos (retries and changes are free). */
+  usage: VideoUsage & { counted: boolean };
 };
 
 export type ProjectListItem = Pick<Project, "id" | "vertical" | "property" | "vehicle" | "inspection" | "updatedAt"> & {

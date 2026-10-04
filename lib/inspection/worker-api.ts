@@ -72,14 +72,25 @@ async function inputFiles(projectId: string) {
   return out;
 }
 
-/** Hand the oldest queued job to this worker (single-process app, so no cross-process race). */
+/** The job to run next: oldest first, but workspaces take turns (counting the jobs they already
+ *  have running), so one company's batch can't hold up everyone else's. Mirrored in pipeline/worker.mjs. */
+export function nextQueued<T extends { id: string; status: RunStatus }>(jobs: T[]): T | undefined {
+  const turns = new Map<string, number>();
+  const whose = (j: T) => j.status.workspace ?? j.id;
+  for (const j of jobs) if (j.status.state === "running") turns.set(whose(j), (turns.get(whose(j)) ?? 0) + 1);
+  return jobs.filter(j => j.status.state === "queued")
+    .sort((a, b) => String(a.status.queuedAt).localeCompare(String(b.status.queuedAt)))
+    .map(job => { const turn = turns.get(whose(job)) ?? 0; turns.set(whose(job), turn + 1); return { job, turn }; })
+    .sort((a, b) => a.turn - b.turn)[0]?.job;
+}
+
+/** Hand the next queued job to this worker (single-process app, so no cross-process race). */
 let claiming: Promise<unknown> = Promise.resolve();
 export function claim(workerId: string) {
   const result = claiming.then(async () => {
-    const queued = (await listJobs()).filter(j => j.status.state === "queued")
-      .sort((a, b) => String(a.status.queuedAt).localeCompare(String(b.status.queuedAt)));
-    if (!queued.length) return null;
-    const { id, status } = queued[0];
+    const next = nextQueued(await listJobs());
+    if (!next) return null;
+    const { id, status } = next;
     const now = new Date().toISOString();
     await writeStatus(id, { ...status, state: "running", workerId, startedAt: now, updatedAt: now, stage: "starting", note: null, error: null });
     const hasState = !!(await stat(join(jobDir(id), "state.tar.gz")).catch(() => null));
