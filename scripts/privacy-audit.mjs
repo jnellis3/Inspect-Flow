@@ -22,8 +22,12 @@ for(const path of files){
 }
 let commits=[];try{commits=execFileSync('git',['rev-list','--all'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim().split('\n').filter(Boolean)}catch{}
 for(const commit of commits){
- const emails=execFileSync('git',['show','-s','--format=%ae%n%ce',commit],{encoding:'utf8'}).trim().split('\n');
- if(emails.some(email=>!email.endsWith('@users.noreply.github.com')))failures.push(`${commit.slice(0,12)}: use a GitHub noreply commit email`);
+ const [author,committer,subject]=execFileSync('git',['show','-s','--format=%ae%n%ce%n%s',commit],{encoding:'utf8'}).trim().split('\n');
+ // On pull_request runs the checkout is GitHub's temporary "Merge <sha> into <sha>" commit, not repository history.
+ if(committer==='noreply@github.com'&&/^Merge [0-9a-f]{40} into [0-9a-f]{40}$/.test(subject))continue;
+ // Merges made on github.com are committed by GitHub itself; authors must still use a noreply address.
+ const noreply=email=>email.endsWith('@users.noreply.github.com');
+ if(!noreply(author)||!(noreply(committer)||committer==='noreply@github.com'))failures.push(`${commit.slice(0,12)}: use a GitHub noreply commit email`);
  const paths=execFileSync('git',['ls-tree','-r','--name-only',commit],{encoding:'utf8'}).trim().split('\n').filter(Boolean);
  for(const path of paths){
   if(path!=='.env.example'&&!publicMedia.test(path)&&forbiddenPath.test(path))failures.push(`${commit.slice(0,12)}:${path}: private file in history`);
